@@ -39,7 +39,13 @@ main
 | **builder** (cipher) | `quipu/**` on its branch | commit, push, merge, touch `tests/` or `docs/` |
 | **QA** (vector) | `tests/**`, gate scripts, adversarial review of the builder's diff | verify its own code, or the builder verify its own tests |
 | **writer** (glyph) | `docs/**`, README, PLAN, release notes | change behaviour, or edit code |
-| **research** (grok) | `benchmarks/**`, external surveys, measurement reports | land code without a review |
+| **research** (whoever is free) | `benchmarks/**`, external surveys, measurement reports | land code without a review |
+
+The profiles that exist on this box are `glitch`, `cipher`, `vector`, `glyph` and `default`;
+`cipher`, `vector` and `glyph` are peer-dispatchable through `self/<profile>`. `default` is the user's
+own agent and is not dispatchable through the peer key, so research/benchmark work goes to whichever
+worker is free rather than to a dedicated research profile. (An earlier version of this table named
+`grok` as the research owner; there is no such profile — it was a name from the old fabric corpus.)
 
 A worker never commits and never verifies its own work: the builder writes code, QA's tests are the
 gate, the orchestrator runs the gate and commits. That rule exists because a worker's "tests pass" is
