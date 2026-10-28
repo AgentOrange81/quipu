@@ -37,6 +37,21 @@ def test_iter_entries_skips_unparseable(cfg):
     assert len(entries) == 1
 
 
+def test_numeric_looking_strings_stay_strings(cfg):
+    """CI caught this: id "04159069" came back as 4159069 — the leading zero was parsed away."""
+    e = Entry(id="04159069", kind="fact", project="2026", summary="digit-only id", confidence=0.5)
+    back = read_entry(write_entry(cfg.root, e))
+    assert back.id == "04159069"
+    assert back.project == "2026"
+    assert isinstance(back.project, str)
+
+
+def test_numeric_fields_stay_numbers(cfg):
+    e = Entry(kind="fact", summary="numbers survive", importance=0.85, confidence=0.4)
+    back = read_entry(write_entry(cfg.root, e))
+    assert back.importance == 0.85 and back.confidence == pytest.approx(0.4)
+
+
 def test_summary_with_colon_and_quotes_survives(cfg):
     e = Entry(kind="lesson", summary='He said: "never rsync a live sqlite file" — it corrupts')
     back = read_entry(write_entry(cfg.root, e))

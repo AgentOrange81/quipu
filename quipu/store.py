@@ -27,13 +27,19 @@ def new_id() -> str:
     return os.urandom(4).hex()
 
 
+NUMERIC_RE = re.compile(r"^-?\d+(?:\.\d+)?$")
+
+
 def _scalar(v) -> str:
     if isinstance(v, bool):
         return "true" if v else "false"
     if isinstance(v, (int, float)):
         return str(v)
     s = str(v)
-    if s == "" or any(c in s for c in ':#\n"\''):
+    # A digit-only STRING must be quoted or it comes back as an int: an id of "04159069" round-tripped
+    # to "4159069" (CI, 3.13) — leading zero gone, which silently breaks every supersedes reference
+    # that names it. Same for a project called "2026" and anything else that looks numeric.
+    if s == "" or NUMERIC_RE.match(s) or s in ("true", "false") or any(c in s for c in ':#\n"\''):
         return json.dumps(s, ensure_ascii=False)
     return s
 
@@ -95,7 +101,7 @@ class Entry:
     # --- serialisation -------------------------------------------------
     def to_markdown(self) -> str:
         head = [
-            f"id: {self.id}",
+            f"id: {_scalar(self.id)}",
             f"kind: {self.kind}",
             f"state: {self.state}",
             f"agent: {_scalar(self.agent)}",

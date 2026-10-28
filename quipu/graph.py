@@ -89,9 +89,16 @@ def add_edge(cfg: Config, src: str, predicate: str, dst: str, note_id: str = "",
     with c:
         src = ensure_entity(c, src)   # returns the display name for this identity
         dst = ensure_entity(c, dst)
-        # Idempotent by design: a reflection pass that re-asserts an edge must not blow up on the
-        # UNIQUE(src,predicate,dst,valid_from) constraint, and two spellings of one entity now
-        # collapse into exactly that case.
+        # Idempotent by design, in two shapes. Same second: the UNIQUE constraint below. Later
+        # instant: a new valid_from, which used to create a SECOND live edge for the same
+        # (src, predicate, dst) — a slow duplicate, found by CI. A live edge for this triple means
+        # the fact is already asserted, so keep the first and return its id.
+        live = c.execute(
+            "SELECT id FROM edges WHERE src = ? AND predicate = ? AND dst = ? AND valid_to IS NULL",
+            (src, predicate, dst),
+        ).fetchone()
+        if live:
+            return live[0]
         c.execute(
             "INSERT INTO edges(src, predicate, dst, note_id, confidence, valid_from, valid_to) "
             "VALUES(?,?,?,?,?,?,NULL) ON CONFLICT(src, predicate, dst, valid_from) DO NOTHING",

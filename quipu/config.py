@@ -4,7 +4,10 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from pathlib import Path
 
-import tomllib
+try:  # Python 3.11+
+    import tomllib
+except ModuleNotFoundError:  # Python 3.10: keep the stdlib-only promise, parse the subset we write
+    tomllib = None
 
 from . import DEFAULT_PREDICATES
 
@@ -63,12 +66,67 @@ class Config:
         )
 
 
+def _mini_toml(text: str) -> dict:
+    """Parse the TOML subset `Config.save()` writes: [sections], `key = value`, string arrays.
+
+    Only used on Python 3.10, where tomllib does not exist. Anything richer is refused loudly rather
+    than half-understood — a config the parser fudges is worse than one it rejects.
+    """
+    import json
+    import re
+
+    out: dict = {}
+    section: dict = out
+    pending: list[str] | None = None
+    for raw in text.splitlines():
+        line = raw.strip()
+        if pending is not None:
+            pending.append(line)
+            if "]" in line:
+                body = " ".join(pending)
+                pending = None
+                key, _, value = body.partition("=")
+                # TOML allows a trailing comma before `]`; JSON does not
+                cleaned = re.sub(r",\s*\]", "]", value.strip()).replace("'", '"')
+                section[key.strip()] = json.loads(cleaned)
+            continue
+        if not line or line.startswith("#"):
+            continue
+        if line.startswith("[") and line.endswith("]"):
+            section = out.setdefault(line[1:-1].strip(), {})
+            continue
+        key, _, value = line.partition("=")
+        key, value = key.strip(), value.strip()
+        if value.startswith("[") and not value.endswith("]"):
+            pending = [line]          # multi-line array, as save() emits predicates
+            continue
+        if value.startswith("["):
+            section[key] = json.loads(value.replace("'", '"'))
+        elif value.startswith(('"', "'")):
+            section[key] = value[1:-1]
+        elif value in ("true", "false"):
+            section[key] = value == "true"
+        else:
+            for cast in (int, float):   # 0.5 must parse as a float, not the string "0.5"
+                try:
+                    section[key] = cast(value)
+                    break
+                except ValueError:
+                    continue
+            else:
+                section[key] = value
+    if pending:
+        raise ValueError("unterminated array in config")
+    return out
+
+
 def load(root: str | Path, create: bool = False) -> Config:
     root = Path(root).expanduser().resolve()
     cfg = Config(root=root)
     path = cfg.config_path
     if path.exists():
-        data = tomllib.loads(path.read_text(encoding="utf-8"))
+        text = path.read_text(encoding="utf-8")
+        data = tomllib.loads(text) if tomllib else _mini_toml(text)
         q = data.get("quipu", {})
         cfg.predicates = tuple(q.get("predicates", DEFAULT_PREDICATES))
         cfg.promote_threshold = float(q.get("promote_threshold", cfg.promote_threshold))
