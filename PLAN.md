@@ -26,6 +26,33 @@ Milestones are ordered by "what unblocks Dirk's use today", not by what is most 
 - [ ] **Dedup on promotion**: before writing, check near-duplicates (minhash over the body, threshold
   0.8) and turn a duplicate into an `updated` timestamp bump rather than a new entry.
 
+## M1.5 — integration seams (how agents actually use this)
+
+Three surfaces, cheapest first, and none of them makes an agent framework the owner of the memory.
+
+- [ ] **Skill only (shipped, zero code).** The `quipu` skill tells an agent when to recall and when to
+  write, using the CLI. Framework-agnostic, breaks nothing when the internals move. This is the
+  supported path today.
+- [ ] **`quipu mcp` — stdio MCP server.** Expose `search`, `write`, `timeline`, `neighbors` over MCP so
+  any client (Claude Code, Cursor, Codex, Hermes' native MCP client) can use the vault. Thin wrapper
+  over the same `quipu` functions; no second implementation. This is the portability story.
+- [ ] **Hermes MemoryProvider, packaged.** Ship `quipu.hermes_provider` with a
+  `hermes_agent.memory_providers` entry point and `register(ctx)`, so `memory.provider: quipu` gives:
+  `prefetch()` → automatic top-k recall before a turn, `sync_turn()` → cheap per-turn buffering,
+  `system_prompt_block()` → a small always-loaded digest, `on_pre_compress()` → memory injected before
+  context is compressed, `get_tool_schemas()`/`handle_tool_call()` → search/write as native tools.
+  This is Icarus' feature set through a **documented contract**, shipped inside quipu's own package —
+  no directory forked into `~/.hermes/plugins`, no version to chase.
+
+**Why not a bespoke Hermes plugin.** Icarus was a plugin *and* the only integration path, so when
+upstream stopped committing, the corpus could only be reached through abandoned code. A CLI contract
+plus an optional provider plus an optional MCP server means Hermes is a *consumer* of quipu: if the
+provider contract changes, we lose auto-injection, not the memory.
+
+**`sync_turn` must not write an entry per turn.** That is exactly the append-only failure this project
+exists to fix. Each turn appends to `.quipu/session-<id>.jsonl`; one reflection pass at session end
+(issue #3's hook) turns the buffer into gated entries. Capture is cheap, promotion stays expensive.
+
 ## M2 — retrieval that is actually comparable
 
 - [ ] **Embeddings, optional**: `quipu embed --model <name>` writing a `vec` table; cosine in Python
