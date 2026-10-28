@@ -12,6 +12,7 @@ from . import export as export_mod
 from . import graph as graph_mod
 from . import index as index_mod
 from . import promote as promote_mod
+from .importers import fabric as fabric_mod
 from .store import Entry, find_entry, iter_entries, write_entry
 
 
@@ -94,6 +95,39 @@ def cmd_reflect(args) -> int:
     promoted = sum(1 for e in written if e.state == "promoted")
     print(f"{len(written)} proposals, {promoted} promoted, {len(written) - promoted} left raw")
     return 0
+
+
+def cmd_import(args) -> int:
+    """Bring an external corpus into the vault (currently: Icarus/fabric markdown)."""
+    src = Path(args.src_dir)
+    if not src.is_dir():
+        print(f"not a directory: {src}", file=sys.stderr)
+        return 2
+    # `--vault` may come before or after the subcommand; the subcommand's copy wins.
+    vault = getattr(args, "vault_override", None) or args.vault
+    if args.dry_run:
+        cfg = config_mod.load(vault, create=False)
+        result = fabric_mod.import_fabric(src, cfg.root, dry_run=True,
+                                         include_noise=args.include_noise)
+        print(json.dumps(_import_summary(result, src, vault, True), indent=2))
+        return 0
+    cfg = config_mod.load(vault, create=True)
+    result = fabric_mod.import_fabric(src, cfg.root, dry_run=False, include_noise=args.include_noise)
+    index_mod.reindex(cfg.root, cfg.db_path)
+    print(json.dumps(_import_summary(result, src, vault, False), indent=2))
+    return 0
+
+
+def _import_summary(result, src, vault, dry_run) -> dict:
+    return {
+        "source": str(src),
+        "vault": str(vault),
+        "dry_run": dry_run,
+        "written": len(result.written),
+        "skipped": len(result.skipped),
+        "by_kind": result.by_kind,
+        "by_state": result.by_state,
+    }
 
 
 def cmd_search(args) -> int:
@@ -251,6 +285,19 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--edge", action="append", metavar="SRC:PRED:DST",
                    help="assert a graph edge from this entry (repeatable)")
     s.add_argument("--allow-new", action="store_true")
+
+    s = add("import", "import a corpus into the vault", cmd_import)
+    s.add_argument("--vault", dest="vault_override", default=None,
+                   help="vault root (same as the global --vault)")
+    fmt = s.add_subparsers(dest="format", required=True)
+
+    fs = fmt.add_parser("fabric", help="import an Icarus/fabric corpus")
+    fs.add_argument("src_dir")
+    fs.add_argument("--vault", dest="vault_override", default=argparse.SUPPRESS,
+                    help="vault root (same as the global --vault)")
+    fs.add_argument("--dry-run", action="store_true", help="report counts, write nothing")
+    fs.add_argument("--include-noise", action="store_true",
+                    help="also import low-value session entries (as pruned)")
 
     s = add("reflect", "run the promotion pass over a transcript", cmd_reflect)
     s.add_argument("transcript", nargs="?")
