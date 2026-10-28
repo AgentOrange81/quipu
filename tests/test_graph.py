@@ -74,6 +74,15 @@ def test_duplicate_assertion_is_idempotent(cfg):
     assert len(graph_mod.timeline(cfg, "quipu")) == 1
 
 
+def test_reasserting_later_does_not_duplicate_the_live_edge(cfg):
+    """CI caught this: two calls a second apart made two live edges for one fact."""
+    a = graph_mod.add_edge(cfg, "quipu", "depends_on", "sqlite", at="2026-01-01T00:00:00Z")
+    b = graph_mod.add_edge(cfg, "quipu", "depends_on", "sqlite", at="2026-01-02T00:00:00Z")
+    assert a == b
+    live = [r for r in graph_mod.timeline(cfg, "quipu") if r["valid_to"] is None]
+    assert len(live) == 1, "a re-asserted fact must not open a second window"
+
+
 def test_identity_ignores_separators_and_accents(cfg):
     graph_mod.add_edge(cfg, "FTS-5", "used_by", "sqlite")
     graph_mod.add_edge(cfg, "fts5", "part_of", "sqlite")
