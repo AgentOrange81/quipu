@@ -1,0 +1,338 @@
+"""Fabric (Icarus) corpus -> quipu entries.
+
+A fabric entry is a markdown file with YAML-ish frontmatter::
+
+    ---
+    id: "a86b8c2a"
+    agent: "cipher"
+    platform: "cli"
+    timestamp: "2026-10-10T18:23:30Z"
+    type: "code-session"
+    tier: "hot"
+    summary: "one line, the retrieval signal"
+    project_id: "shitter"
+    status: "completed"
+    outcome: "what actually happened"
+    verified: "true"
+    evidence: "the exact command and its output"
+    training_value: "high"        # high | normal | low
+    tags: [shitter, migration]
+    ---
+
+    the body
+
+Mapping onto a quipu entry:
+
+    type            -> kind     decision/lesson/fact/handoff/conclusion/question keep
+                               their name, session/code-session become `capture`,
+                               anything else becomes `conclusion`
+    training_value  -> state    high|normal -> `promoted`, low -> `pruned`,
+                               missing -> `raw`
+    training_value  -> importance  high 0.9, normal 0.7, low 0.3, missing 0.0
+    verified        -> confidence  true 1.0, false 0.0, absent 0.5
+    summary         -> summary
+    outcome + evidence -> evidence
+    project_id      -> project
+    agent           -> agent
+    session_id      -> session
+    timestamp       -> created
+    id              -> entry id (a stable hash of the source path when absent)
+    tags            -> tags, plus a reason tag on pruned entries
+    body            -> body, minus the duplicated H1/summary preamble
+
+Session noise: `session`/`code-session` entries with `training_value: low` are the corpus's
+"fixed a bug" noise. They are never written as promoted -- they are skipped entirely unless
+`include_noise=True`, which writes them as `pruned`.
+"""
+from __future__ import annotations
+
+import hashlib
+import json
+import re
+from dataclasses import dataclass, field
+from datetime import datetime, timezone
+from pathlib import Path
+
+from ..store import Entry, write_entry
+
+#: fabric `type` -> quipu `kind`; unknown types fall back to DEFAULT_KIND
+KIND_BY_TYPE = {
+    "decision": "decision",
+    "lesson": "lesson",
+    "fact": "fact",
+    "handoff": "handoff",
+    "conclusion": "conclusion",
+    "question": "question",
+    "session": "capture",
+    "code-session": "capture",
+}
+DEFAULT_KIND = "conclusion"
+
+#: fabric `training_value` -> quipu `state`; missing or unknown values fall back to DEFAULT_STATE
+STATE_BY_TRAINING_VALUE = {"high": "promoted", "normal": "promoted", "low": "pruned"}
+DEFAULT_STATE = "raw"
+
+#: fabric types whose low-value entries are corpus noise, not memory
+NOISE_TYPES = frozenset({"session", "code-session"})
+
+#: fabric `training_value` -> store `importance`, so a promoted entry clears quipu's own
+#: promotion threshold (cfg.promote_threshold, 0.5) and a pruned one does not
+IMPORTANCE_BY_TRAINING_VALUE = {"high": 0.9, "normal": 0.7, "low": 0.3}
+
+#: fabric `verified` -> store `confidence`; absent keeps the store default (0.5)
+CONFIDENCE_BY_VERIFIED = {"true": 1.0, "false": 0.0}
+
+#: files that sit in a corpus root but are documentation, not entries
+IGNORED_NAMES = frozenset({"README.md", "FRONTMATTER-TEMPLATE.md"})
+
+#: why an entry landed in the pruned state (a tag, never a supersedes edge)
+PRUNED_TAG = "pruned:low-training-value"
+
+_FM_RE = re.compile(r"\A---[ \t]*\r?\n(.*?)\r?\n---[ \t]*(?:\r?\n|\Z)", re.S)
+_KV_RE = re.compile(r"^([A-Za-z_][A-Za-z0-9_-]*)[ \t]*:[ \t]*(.*)$")
+_ID_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,63}")
+_ISO_Z_RE = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$")
+
+
+@dataclass
+class ImportResult:
+    """What an import did: the entries it wrote, the noise it skipped, the counts."""
+
+    written: list[Entry] = field(default_factory=list)
+    skipped: list[Path] = field(default_factory=list)
+    by_kind: dict[str, int] = field(default_factory=dict)
+    by_state: dict[str, int] = field(default_factory=dict)
+
+
+def import_fabric(src_dir: str | Path, vault_root: str | Path, *,
+                  dry_run: bool = False, include_noise: bool = False) -> ImportResult:
+    """Convert a fabric corpus into quipu entries under `vault_root`.
+
+    Only the files directly in `src_dir` are considered -- a corpus keeps its stubs and
+    duplicates in sibling directories, and those are not what an import is for.
+    """
+    src = Path(src_dir).expanduser().resolve()
+    root = Path(vault_root).expanduser().resolve()
+    if not src.is_dir():
+        raise NotADirectoryError(f"not a directory: {src}")
+
+    result = ImportResult()
+    files = []
+    for path in sorted(src.glob("*.md")):
+        if path.name in IGNORED_NAMES:
+            continue
+        text = path.read_text(encoding="utf-8", errors="replace")
+        fm, body = _split_frontmatter(text)
+        if fm is None:
+            continue  # not a fabric entry (dashboard, notes, ...)
+        files.append((path, fm, body))
+
+    claimed: dict[str, str] = {}
+    for path, fm, _body in files:
+        # a fabric id is worth more than a path hash, so claim every usable one first
+        raw = _scalar(fm.get("id"))
+        if raw and _ID_RE.fullmatch(raw) and raw not in claimed:
+            claimed[raw] = path.relative_to(src).as_posix()
+
+    for path, fm, body in files:
+        rel = path.relative_to(src).as_posix()
+        ftype = _scalar(fm.get("type"))
+        training_value = _scalar(fm.get("training_value")).lower()
+        if ftype.lower() in NOISE_TYPES and training_value == "low" and not include_noise:
+            result.skipped.append(path)
+            continue
+        kind = KIND_BY_TYPE.get(ftype.lower(), DEFAULT_KIND)
+        state = STATE_BY_TRAINING_VALUE.get(training_value, DEFAULT_STATE)
+        summary = _scalar(fm.get("summary"))
+        entry = Entry(
+            id=_entry_id(fm, rel, claimed),
+            kind=kind,
+            state=state,
+            agent=_scalar(fm.get("agent")),
+            project=_scalar(fm.get("project_id")),
+            session=_scalar(fm.get("session_id")),
+            created=_created(fm.get("timestamp")),
+            source=f"fabric:{rel}",
+            confidence=_confidence(fm),
+            importance=IMPORTANCE_BY_TRAINING_VALUE.get(training_value, 0.0),
+            summary=summary,
+            evidence=_evidence(fm),
+            tags=_tags(fm, state),
+            body=_strip_preamble(body, summary),
+        )
+        if not dry_run:
+            write_entry(root, entry)
+        result.written.append(entry)
+        result.by_kind[kind] = result.by_kind.get(kind, 0) + 1
+        result.by_state[state] = result.by_state.get(state, 0) + 1
+    return result
+
+
+def _split_frontmatter(text: str) -> tuple[dict | None, str]:
+    """Split a fabric file into its frontmatter mapping and its body."""
+    m = _FM_RE.match(text)
+    if not m:
+        return None, text
+    fm: dict = {}
+    for line in m.group(1).splitlines():
+        mm = _KV_RE.match(line)
+        if mm:
+            fm[mm.group(1)] = _parse_value(mm.group(2))
+    return fm, text[m.end():]
+
+
+def _parse_value(raw: str):
+    """Read one frontmatter value: a JSON-ish string, an inline list, or a bare scalar."""
+    raw = raw.strip()
+    if not raw:
+        return ""
+    if raw[0] == '"':
+        return _parse_quoted(raw)
+    if raw[0] == "[":
+        return _parse_inline_list(raw)
+    return _strip_comment(raw).strip()
+
+
+def _parse_quoted(raw: str) -> str:
+    """A double-quoted value: JSON escapes and all (`\\u2014` is an em dash, not six letters)."""
+    try:
+        value, end = json.JSONDecoder().raw_decode(raw)
+    except ValueError:
+        value, end = None, 0
+    if isinstance(value, str) and _only_comment_follows(raw[end:]):
+        return value
+    # hand-written quotes that are not valid JSON: keep the text, undo the escaping
+    m = re.match(r'"(.*)"\s*(?:#.*)?$', raw, re.S)
+    if m:
+        return m.group(1).replace('\\"', '"').replace("\\\\", "\\")
+    return raw.strip('"')
+
+
+def _only_comment_follows(rest: str) -> bool:
+    rest = rest.strip()
+    return not rest or rest.startswith("#")
+
+
+def _parse_inline_list(raw: str) -> list[str]:
+    """`[a,b]` or `["a","b"]` -> ["a", "b"]."""
+    inner = raw.strip()
+    if inner.startswith("["):
+        inner = inner[1:]
+    if inner.endswith("]"):
+        inner = inner[:-1]
+    items: list[str] = []
+    current: list[str] = []
+    in_quote = False
+    for ch in inner:
+        if ch == '"':
+            in_quote = not in_quote
+            current.append(ch)
+        elif ch == "," and not in_quote:
+            items.append("".join(current))
+            current = []
+        else:
+            current.append(ch)
+    items.append("".join(current))
+    out: list[str] = []
+    for item in items:
+        item = item.strip()
+        if len(item) >= 2 and item[0] == '"' and item[-1] == '"':
+            try:
+                item = json.loads(item)
+            except ValueError:
+                item = item[1:-1]
+        if item:
+            out.append(item)
+    return out
+
+
+def _strip_comment(raw: str) -> str:
+    """Drop a trailing `# comment` from a bare scalar."""
+    idx = raw.find(" #")
+    return raw[:idx] if idx != -1 else raw
+
+
+def _scalar(value) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    return str(value).strip()
+
+
+def _evidence(fm: dict) -> str:
+    """`outcome` plus `evidence` -- what happened, and the proof it happened.
+
+    Folded onto one line: the store writes `**Evidence:** {evidence}` into the body, so a
+    multi-line value would break that line and leave the tail behind as stray body text.
+    """
+    parts = [_one_line(_scalar(fm.get("outcome"))), _one_line(_scalar(fm.get("evidence")))]
+    return " — ".join(p for p in parts if p)
+
+
+def _one_line(text: str) -> str:
+    """Collapse whitespace runs so the value stays on a single line."""
+    return " ".join(text.split())
+
+
+def _tags(fm: dict, state: str) -> list[str]:
+    tags = fm.get("tags")
+    out = [str(t).strip() for t in tags] if isinstance(tags, list) else []
+    out = [t for t in out if t]
+    if state == "pruned" and PRUNED_TAG not in out:
+        out.append(PRUNED_TAG)
+    return out
+
+
+def _confidence(fm: dict) -> float:
+    """fabric `verified` -> store `confidence`; absent keeps the store default."""
+    raw = _scalar(fm.get("verified")).lower()
+    if raw in CONFIDENCE_BY_VERIFIED:
+        return CONFIDENCE_BY_VERIFIED[raw]
+    return 0.5
+
+
+def _created(value) -> str:
+    """The fabric timestamp, normalised to the ISO 8601 Z the store writes."""
+    ts = _scalar(value)
+    if not ts or _ISO_Z_RE.match(ts):
+        return ts
+    try:
+        dt = datetime.fromisoformat(ts.replace("Z", "+00:00"))
+    except ValueError:
+        return ts
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def _strip_preamble(body: str, summary: str) -> str:
+    """The body without the H1/summary preamble -- the store writes that part itself."""
+    lines = body.splitlines()
+    while lines and not lines[0].strip():
+        lines.pop(0)
+    if lines and lines[0].lstrip().startswith("# "):
+        lines.pop(0)
+    if summary and lines and lines[0].strip() == summary.strip():
+        lines.pop(0)
+    while lines and not lines[0].strip():
+        lines.pop(0)
+    return "\n".join(lines).strip()
+
+
+def _entry_id(fm: dict, rel: str, claimed: dict[str, str]) -> str:
+    """The fabric id when it is usable and free, else a stable hash of the source path."""
+    raw = _scalar(fm.get("id"))
+    if raw and _ID_RE.fullmatch(raw) and claimed.get(raw) == rel:
+        return raw
+    candidate = _path_hash(rel)
+    salt = 0
+    while candidate in claimed:
+        salt += 1
+        candidate = _path_hash(f"{rel}#{salt}")
+    claimed[candidate] = rel
+    return candidate
+
+
+def _path_hash(rel: str) -> str:
+    return hashlib.sha256(rel.encode("utf-8")).hexdigest()[:8]
