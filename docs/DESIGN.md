@@ -78,6 +78,34 @@ Only what has been verified against source (this table grows as the survey conti
 | **Honcho** | the "deriver" pattern: an asynchronous background pass that reads messages and maintains a representation, so recall is not a per-request LLM call; peer/session separation (our `agent` / `session` fields) | a Postgres service and AGPL coupling; theory-of-mind representations are out of scope for v1 |
 | **self-evolving memory (Cole Medin's KB)** | promotion instead of appending; a reflection pass run in an isolated context so it does not pollute the working one; the dual posture of a hand-curated rules file next to autonomous memory | treating the promoted file as the only artifact — we keep the raw layer and the graph |
 
+Surveyed at source level on 2026-10-28 (repos cloned and read, not READMEs). What each one taught:
+
+| system | what we took | what we skipped, and why |
+|---|---|---|
+| **mem0** (Apache-2.0) | additive extraction with `linked_memory_ids`; entity boost that is *penalised* by hub degree, `sim*0.5*1/(1+0.001(n_linked-1)^2)` — a node touching everything is not evidence | its hybrid retrieval needs a `keyword_search` backend or it silently degrades to vector-only; the knowledge graph was **removed from OSS in v3** (Platform-only) despite the paper |
+| **Graphiti / Zep** (Apache-2.0) | genuinely bi-temporal edges (`valid_at`/`invalid_at`/`expired_at`); contradiction resolved by **date arithmetic, no LLM verdict**; MinHash/LSH blocking (32 perms, band 4, Jaccard 0.9) before any LLM dedupe | requires a graph database as the source of truth — the opposite of markdown-first |
+| **Letta** (Apache-2.0) | git-backed memory files with commit-time frontmatter validation (`description` required, `read_only` immutable, size/depth caps) — a pre-commit hook as the quality gate | memory blocks and archival vector memory **no longer exist** in current source; no graph at all |
+| **Cognee** (Apache-2.0) | `uuid5(normalized identity)` so re-ingest merges instead of duplicating; a three-stage relation vocabulary pass | 20+ search types and a "truth subspace" are complexity we cannot justify at 1k notes; extraction is not practically local |
+| **Memori** (Apache-2.0) | a plain SQL SPO triple table with `UNIQUE(entity,s,p,o)` and a reinforcement counter — proof the graph does not need a graph DB | no temporal validity, only a hit counter |
+| **Basic Memory** (AGPL-3.0) | the closest analog to our vault: markdown source of truth, derived SQLite/FTS5, **no LLM in indexing**; authored bi-temporality `@effective[from,to)` with fixed-width bounds so string compare is chronological; fusion `max(v,f) + 0.3*min(v,f)` | AGPL — reimplement the ideas, never vendor the code |
+| **Honcho** (AGPL-3.0) | the deriver prompt discipline: atomic facts about a target, mandatory `source_indices` back to raw messages, resolve relative time against message time, never derive facts about A from B's messages; `observer`/`observed` on every document | Postgres+pgvector service; belief-graph/"what does A know about B" is out of scope for v1 |
+
+**Ranked, the five mechanics worth having** (all cheap, all LLM-optional):
+
+1. Deterministic identity — `uuid5`-style key over a normalised name. Kills re-ingest duplicates and
+   four-profile merge races at zero cost. (Landing in this repo now: `identity()`/`resolve()`.)
+2. Authored `@effective[a,b)` in the markdown itself, indexed as scalars — bi-temporality that
+   survives a reindex because the truth is in the file.
+3. Additive extraction that carries `source_indices` — "no destructive rewrite", and (evidence → fact)
+   is exactly the shape of an SFT pair.
+4. Dated contradiction invalidation with no LLM verdict — "facts changed" becomes a `WHERE` clause.
+5. FTS5/vector fusion with a title boost and a gate, plus hub-penalised entity boost. CPU-friendly, no
+   reranker needed.
+
+**Traps this survey saved us from:** mem0's OSS build has no graph; both closest fits (Basic Memory,
+Honcho) are AGPL; Letta's memory blocks are gone from current source; Graphiti's RRF is `Σ1/(rank+1)`,
+not the 1/60 convention, so its published numbers are not comparable to systems that use 1/60.
+
 ## 7. Failure modes this design is a reaction to
 
 Each of these cost real time in the corpus quipu was extracted from:

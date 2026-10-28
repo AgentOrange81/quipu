@@ -53,11 +53,14 @@ provider contract changes, we lose auto-injection, not the memory.
 exists to fix. Each turn appends to `.quipu/session-<id>.jsonl`; one reflection pass at session end
 (issue #3's hook) turns the buffer into gated entries. Capture is cheap, promotion stays expensive.
 
+Measured inputs for M2–M4 (hardware, models, costs, yields): [docs/MEASUREMENTS.md](docs/MEASUREMENTS.md).
+
 ## M2 — retrieval that is actually comparable
 
 - [ ] **Embeddings, optional**: `quipu embed --model <name>` writing a `vec` table; cosine in Python
-  (1k–50k notes is fine in numpy) or sqlite-vec if it is worth the dependency. Model choice pending the
-  AMD survey: a small CPU embedder must work with no GPU at all.
+  (1k–50k notes is fine in numpy) or sqlite-vec if it is worth the dependency. **Default to
+  bge-small-en-v1.5 (384d, MIT)**: measured 117/s on GPU and 81/s on CPU, so 50k notes re-indexes in
+  ~7–10 min without a GPU at all.
 - [ ] **Hybrid query**: `score = w_bm25*bm25 + w_vec*cos + w_graph*graph_bonus`, weights in config.
 - [ ] **Benchmark harness** against LongMemEval and LoCoMo with our honest R@5/R@10 numbers published
   in `benchmarks/`, including the failures. No "100%" headline.
