@@ -1,3 +1,4 @@
+# CI is staged, not pushed (token lacks the workflow scope) — see docs/ci.md
 # CI is staged, not yet pushed
 
 `.github/workflows/ci.yml` exists on disk but has never been pushed: the deploy token
