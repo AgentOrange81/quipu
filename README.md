@@ -8,13 +8,38 @@ turns the memory's own lifecycle into labelled training data.
 
 ```bash
 pip install -e ".[dev]"        # or: uv sync
-quipu init --vault ~/memory
-quipu capture "the 3600 DOCP config threw 649 CCEs in one boot" --project wraith
-quipu reflect session.md --agent glitch --project wraith    # one LLM pass, gated
-quipu search "memory stability" --project wraith
-quipu export sft --out data/sft.jsonl                        # supervised examples
-quipu export dpo --out data/dpo.jsonl                        # preference pairs
+quipu --vault ~/memory init
+quipu --vault ~/memory capture "the 3600 DOCP config threw 649 CCEs in one boot" --project wraith
+quipu --vault ~/memory write --kind decision --state promoted \
+  --summary "DOCP 3200 with FCLK 1600 is stable on the TRX40" \
+  --evidence "649 MC25_STATUS CECC events in boot -1; 0 since" \
+  --ask "why did the box reboot at 03:02?" --project wraith
+quipu --vault ~/memory search DOCP --project wraith
+quipu --vault ~/memory export sft --out data/sft.jsonl     # supervised examples
+quipu --vault ~/memory export dpo --out data/dpo.jsonl     # preference pairs
 ```
+
+`--vault` is a global flag: it goes **before** the subcommand. It defaults to the working
+directory, so inside a vault you can leave it out entirely.
+
+`quipu reflect` is the other way in, and it is the only one that needs a model: it posts the
+transcript to the OpenAI-compatible endpoint in `.quipu/config.toml` (`[llm] base_url`, default
+`http://127.0.0.1:8080/v1`). With no endpoint reachable it fails loudly with
+`RuntimeError: LLM request failed: <urlopen error [Errno 111] Connection refused>`; use
+`quipu reflect --fake <file.json>` to supply the proposals yourself and skip the network entirely.
+
+No model or network is needed to see the whole lifecycle — capture, reflect, promote, correct,
+export:
+
+```bash
+bash examples/demo.sh
+```
+
+That script builds a throwaway vault, runs a reflection pass against a canned response
+(`quipu reflect --fake`), writes a correction with `--supersedes`, and exports both datasets.
+**After the quickstart, read [docs/USING.md](docs/USING.md)** — it is the day-to-day guide: the
+recall-first habit, what makes an entry worth promoting, how to correct one, and what to do when
+something goes wrong.
 
 ## Why another memory system
 
@@ -52,13 +77,17 @@ capture ──(reflect)──► proposal ──(gate: importance ≥ 0.5 AND ev
 
 ```json
 {"prompt": "can I run DOCP 3600 on the TRX40 after the BIOS flash?",
- "chosen": "DOCP 3600 with FCLK 1800 is stable after BIOS 2601 — 3 boots, zero MCEs. Evidence: ...",
- "rejected": "DOCP was dropped from 3600 to 3200 with FCLK 1600 to resolve instability. Evidence: 649 CCEs in boot -1",
- "meta": {"reason": "3 consecutive boots, journalctl -k per boot: 0 MCE lines each"}}
+ "chosen": "DOCP 3600 with FCLK 1800 is stable after BIOS 2601 — 3 boots, zero MCEs.\n\nEvidence: 3 consecutive boots, journalctl -k per boot: 0 MCE lines each",
+ "rejected": "DOCP was dropped from 3600 to 3200 with FCLK 1600 to resolve instability.\n\nEvidence: 649 CCEs in boot -1",
+ "meta": {"quipu": {"entry": "…", "kind": "decision", "state": "promoted"},
+          "superseded": {"entry": "…", "kind": "decision", "state": "promoted"},
+          "reason": "3 consecutive boots, journalctl -k per boot: 0 MCE lines each"}}
 ```
 
 That record is a real one, produced by the tool from a real correction. Note what it carries: the
-question that was actually asked, both answers, and the evidence that decided it.
+question that was actually asked, both answers, the evidence that decided it, and the ids of both
+entries — so the dataset can be rebuilt from the vault. A preference pair appears only where an
+entry corrects another, so `export dpo` on a fresh vault returns zero pairs.
 
 ## Design rules
 
@@ -82,6 +111,7 @@ question that was actually asked, both answers, and the evidence that decided it
 | `quipu capture` | store a raw capture (cheap, unfiltered) |
 | `quipu reflect <transcript>` | one reflection pass → proposals → gated writes |
 | `quipu write` | write a curated entry directly (with `--supersedes`) |
+| `quipu import fabric <dir>` | import an Icarus/fabric corpus into the vault (top-level `*.md` only — #17) |
 | `quipu search` | BM25 over entries, filterable by kind/state/agent/project |
 | `quipu show` | print an entry |
 | `quipu edge` / `invalidate` / `contradict` | assert and retract graph edges |
@@ -91,16 +121,31 @@ question that was actually asked, both answers, and the evidence that decided it
 | `quipu audit` | find corpus problems (promoted-without-evidence, dangling supersedes) |
 | `quipu stats` | promotion rate, graph size, dataset counts |
 
+The importer maps a fabric entry's `type` to a `kind`, its `training_value` to a `state`
+(`low` arrives as `pruned`, never as promoted), and joins `outcome` and `evidence` into one
+evidence line. It reads `*.md` at the top level of the source directory only — nested
+subdirectories are not walked, and the importer does not yet report why a file was skipped
+(#17). The MCP server is not in `main` yet; see "What this is not".
+
 ## What this is not
 
-- Not a vector database. Retrieval is BM25 (SQLite FTS5) today; hybrid + embeddings is on the roadmap,
-  not in `main`.
+- Not a vector database. Retrieval is BM25 (SQLite FTS5) today; hybrid scoring + embeddings is
+  planned, not in `main` (#5).
+- Not an MCP server. `quipu mcp` would expose `search`/`write`/`timeline`/`neighbors` over stdio
+  MCP; it is planned, not in `main` (#9).
+- Not a Hermes memory provider. The packaged `quipu.hermes_provider` entry point — automatic
+  pre-turn recall, per-turn buffering, an always-loaded digest — is planned, not in `main` (#10).
 - Not a hosted service. Two processes maximum: you and the LLM you point it at.
 - Not a finished product. It is a working v0.1 with tests, built to be developed in the open.
 
 ## Status
 
-v0.1.0 — core lifecycle, temporal graph, and three exports are implemented and tested (34 tests).
-See [PLAN.md](PLAN.md) for what lands next.
+v0.1.0 — core lifecycle, temporal graph, three exports, and the fabric corpus importer are
+implemented and tested (70 tests). The suite and the contract it enforces live in `tests/`;
+the promotion gate and the lifecycle are unchanged from v0.1.0. CI runs on Python 3.10, 3.12 and
+3.13; `test (3.10)`, `test (3.12)` and `test (3.13)` are required status checks on `main`, and the
+checks are enforced for admins too — a green matrix is what merges. `main` is protected:
+squash-merge only, linear history, no force-push, no branch deletion. The contribution workflow is
+in [CONTRIBUTING.md](CONTRIBUTING.md); the priorities are in [PLAN.md](PLAN.md).
 
 MIT licensed.
