@@ -125,12 +125,23 @@ entries with a usable `ask` become SFT examples; only `supersedes` links become 
 
 ## When it goes wrong
 
-**No model available.** `quipu reflect --fake <file.json>` reads the proposals from a JSON file
-instead of calling an endpoint — the path the CI smoke test uses, no network, no model:
-`2 proposals, 2 promoted, 0 left raw`. Without `--fake`, `reflect` talks to the OpenAI-compatible
-endpoint in `.quipu/config.toml` (`[llm] base_url`, default `http://127.0.0.1:8080/v1`), and if
-nothing is listening it fails with `RuntimeError: LLM request failed: <urlopen error [Errno 111]
-Connection refused>`. `--dry-run` prints the proposals and writes nothing.
+**No model available.** `quipu reflect <transcript> --fake <file.json>` reads the proposals from
+a JSON file instead of calling an endpoint — no network, no model:
+
+```bash
+quipu reflect transcript.md --fake response.json
+```
+
+```
+2 proposals, 2 promoted, 0 left raw
+```
+
+The transcript is required. `quipu reflect --fake response.json` on its own exits 2 with
+`empty transcript`; the transcript can also be piped in on stdin. `examples/demo.sh` runs this
+whole path with no model. Without `--fake`, `reflect` talks to the OpenAI-compatible endpoint in
+`.quipu/config.toml` (`[llm] base_url`, default `http://127.0.0.1:8080/v1`), and if nothing is
+listening it fails with `RuntimeError: LLM request failed: <urlopen error [Errno 111] Connection
+refused>`. `--dry-run` prints the proposals and writes nothing.
 
 **The promotion rate.** `quipu stats` reports `promotion_rate` as promoted ÷ total entries. Near
 **1.0** means nearly everything was promoted: you are writing curated entries and barely capturing
