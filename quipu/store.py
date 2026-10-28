@@ -27,7 +27,13 @@ def new_id() -> str:
     return os.urandom(4).hex()
 
 
-NUMERIC_RE = re.compile(r"^-?\d+(?:\.\d+)?$")
+#: ONE definition of "this looks like a number", shared by the writer and the reader. The writer
+#: quotes every string that matches it (so it comes back as the string it was); the reader
+#: coerces only UNQUOTED values that match it (so a quoted value is always a string).
+#: Exponent forms are in: "1.5e3" reads back as 1500.0 unless the writer quotes it. Underscores
+#: and a leading "+" are out: Python's int()/float() would take "1_0" for 10 and "+7" for 7, and
+#: a string that only looks numeric must stay a string.
+NUMBER_RE = re.compile(r"^-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?$")
 
 
 def _scalar(v) -> str:
@@ -38,8 +44,9 @@ def _scalar(v) -> str:
     s = str(v)
     # A digit-only STRING must be quoted or it comes back as an int: an id of "04159069" round-tripped
     # to "4159069" (CI, 3.13) — leading zero gone, which silently breaks every supersedes reference
-    # that names it. Same for a project called "2026" and anything else that looks numeric.
-    if s == "" or NUMERIC_RE.match(s) or s in ("true", "false") or any(c in s for c in ':#\n"\''):
+    # that names it. Same for a project called "2026" and anything else that looks numeric. The
+    # quote guard and the parser share NUMBER_RE, so they cannot drift apart again.
+    if s == "" or NUMBER_RE.match(s) or s in ("true", "false") or any(c in s for c in ':#\n"\''):
         return json.dumps(s, ensure_ascii=False)
     return s
 
@@ -54,16 +61,16 @@ def _parse_scalar(raw: str):
         except json.JSONDecodeError:
             return raw
     if raw[0] == raw[-1] and raw[0] in "\"'" and len(raw) >= 2:
+        # a quoted value is ALWAYS a string, whatever it looks like
         try:
             return json.loads(raw) if raw[0] == '"' else raw[1:-1]
         except json.JSONDecodeError:
             return raw[1:-1]
     if raw in ("true", "false"):
         return raw == "true"
-    try:
-        return float(raw) if "." in raw else int(raw)
-    except ValueError:
-        return raw
+    if NUMBER_RE.match(raw):
+        return float(raw) if ("." in raw or "e" in raw or "E" in raw) else int(raw)
+    return raw
 
 
 @dataclass

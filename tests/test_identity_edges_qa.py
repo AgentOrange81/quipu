@@ -105,16 +105,16 @@ def test_non_latin_name_produces_a_stable_nonempty_identity_key(cfg):
     assert len(rows) == 1 and rows[0]["id"] == eid, "add_edge+timeline round-trip works in isolation"
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="KNOWN DEFECT (finding 1): identity() maps every non-Latin name to 'unknown', so two "
-    "distinct non-Latin entities collapse into one node",
-)
 def test_distinct_non_latin_entities_stay_separate(cfg):
     graph_mod.add_edge(cfg, "日本語", "part_of", "nihongo-doc", at=T1)
     graph_mod.add_edge(cfg, "中文", "part_of", "zhongwen-doc", at=T1)
 
-    assert len(_entities(cfg)) == 2, "two distinct non-Latin names must be two entities"
+    # Both ends of an edge are entities (test_graph asserts materialize()==2 for ONE edge), so two
+    # edges naming four distinct things is four rows. The claim under test is that the two non-Latin
+    # names are separate nodes — not that the table holds exactly two rows.
+    keys = [e["key"] for e in _entities(cfg)]
+    assert {"日本語", "中文"} <= set(keys), "both non-Latin names must be entities"
+    assert len(keys) == len(set(keys)), "no two entities may share a key"
     assert len(graph_mod.timeline(cfg, "日本語")) == 1
     assert len(graph_mod.timeline(cfg, "中文")) == 1
 
@@ -164,12 +164,6 @@ def test_contradiction_history_three_windows_and_point_in_time(cfg):
     assert [r["dst"] for r in mid] == ["postgres"]
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="KNOWN DEFECT (finding 2): contradict() commits the close BEFORE add_edge() validates "
-    "the predicate, so a rejected replacement leaves the old belief closed — DESIGN.md §5 "
-    "promises 'closes the old and opens the new in one transaction'",
-)
 def test_failed_replacement_gives_back_a_live_belief(cfg):
     oid = graph_mod.add_edge(cfg, "svc", "depends_on", "redis", at=T1)
     with pytest.raises(ValueError):
@@ -250,11 +244,6 @@ def test_negative_numeric_strings_stay_strings(cfg):
     assert back.project == "-000123", "leading-zero negatives must survive as strings"
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="KNOWN DEFECT (finding 4): _scalar() leaves '1.5e3'/'1_0' unquoted but _parse_scalar() "
-    "coerces them to numbers — quote guard and parser disagree",
-)
 def test_exotic_numeric_looking_strings_round_trip(cfg):
     e = Entry(kind="fact", project="1.5e3", agent="1_0", summary="exponent and underscore literals")
     back = read_entry(write_entry(cfg.root, e))
