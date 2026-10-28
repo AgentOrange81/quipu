@@ -6,6 +6,7 @@ answerable — and the pair becomes preference data on export.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 import sqlite3
@@ -22,7 +23,7 @@ def slug(name: str) -> str:
 
 
 def identity(name: str) -> str:
-    """The identity key: case-, separator- and accent-insensitive.
+    """The identity key: case-, width-, separator- and accent-insensitive, in ANY script.
 
     `slug()` alone is not enough and this was a live bug: "Next.js" -> next-js while "nextjs" ->
     nextjs, so one entity became two nodes — precisely what the old docstring claimed to prevent.
@@ -32,9 +33,43 @@ def identity(name: str) -> str:
 
     A *version* is a different key on purpose: "Next.js 16" -> nextjs16 stays separate, because a
     version qualifier is a property of the assertion, not of the entity.
+
+    Letters and digits of EVERY script are kept. The old key folded them away — "日本語" and "中文"
+    both became "unknown", so two different entities collapsed into one node. Only a name with no
+    letter or digit at all falls back, and then to a digest of the raw name, so two such names never
+    share a key either.
     """
-    folded = unicodedata.normalize("NFKD", name or "").encode("ascii", "ignore").decode()
-    return re.sub(r"[^a-z0-9]", "", folded.lower()) or "unknown"
+    raw = name or ""
+    folded = unicodedata.normalize("NFKD", raw.casefold())
+    key = "".join(ch for ch in folded if unicodedata.category(ch)[0] in ("L", "N"))
+    if key:
+        return key
+    return "unknown-" + hashlib.sha256(raw.encode("utf-8")).hexdigest()[:8]
+
+
+def display_name(name: str) -> str:
+    """The display form of a name: its ASCII slug when it has one, itself when it has not.
+
+    `slug()` collapses every non-ASCII name to "entity": two different Japanese names would then
+    share a display name and collide on the UNIQUE(name) column. A name with no ASCII letter or
+    digit keeps itself, so it stays readable and stays distinct.
+    """
+    text = (name or "").strip()
+    if any(ch.isascii() and ch.isalnum() for ch in text):
+        return slug(text)
+    return text or "entity"
+
+
+def hub_stem(name: str, key: str) -> str:
+    """The file name of an entity hub: its slug, or a digest when the slug is the generic fallback.
+
+    Two non-Latin entities both slug to "entity", so without this they would overwrite each other's
+    hub file.
+    """
+    text = (name or "").strip()
+    if any(ch.isascii() and ch.isalnum() for ch in text):
+        return slug(text)
+    return "entity-" + hashlib.sha256((key or text).encode("utf-8")).hexdigest()[:8]
 
 
 def canonical(name: str) -> str:
@@ -45,17 +80,17 @@ def ensure_entity(c: sqlite3.Connection, name: str, kind: str = "thing", aliases
     """Create or find the entity by IDENTITY, return its display name."""
     name = (name or "").strip()
     key = identity(name)
+    disp = display_name(name)
     row = c.execute("SELECT name, aliases, key FROM entities WHERE key = ? OR name = ?",
-                    (key, slug(name))).fetchone()
+                    (key, disp)).fetchone()
     if row:
-        disp, raw_aliases = row[0], row[1]
+        stored, raw_aliases = row[0], row[1]
         seen = set(json.loads(raw_aliases or "[]"))
-        if name != disp:
+        if name != stored:
             seen.add(name)  # keep every spelling we saw, never as a second node
         c.execute("UPDATE entities SET aliases = ?, key = ? WHERE name = ?",
-                  (json.dumps(sorted(seen), ensure_ascii=False), key, disp))
-        return disp
-    disp = slug(name)
+                  (json.dumps(sorted(seen), ensure_ascii=False), key, stored))
+        return stored
     extra = sorted({*aliases, *([name] if name != disp else [])})
     c.execute("INSERT INTO entities(name, kind, aliases, created, key) VALUES(?,?,?,?,?)",
               (disp, kind, json.dumps(extra, ensure_ascii=False), now_iso(), key))
@@ -66,9 +101,48 @@ def resolve(cfg: Config, name: str) -> str:
     """Map any spelling to the stored display name (queries must go through this)."""
     c = connect(cfg.db_path)
     row = c.execute("SELECT name FROM entities WHERE key = ? OR name = ?",
-                    (identity(name), slug(name))).fetchone()
+                    (identity(name), display_name(name))).fetchone()
     c.close()
-    return row[0] if row else slug(name)
+    return row[0] if row else display_name(name)
+
+
+def _check_predicate(cfg: Config, predicate: str, allow_new_predicate: bool = False) -> None:
+    """A predicate outside the closed vocabulary is a hard error — unless it is let through."""
+    if predicate not in cfg.predicates and not allow_new_predicate:
+        raise ValueError(
+            f"predicate {predicate!r} is not in the vocabulary; add it to {cfg.config_path} "
+            f"or pass allow_new_predicate=True"
+        )
+
+
+def _assert_edge(c: sqlite3.Connection, src: str, predicate: str, dst: str, note_id: str,
+                 confidence: float, at: str) -> int:
+    """Open an edge on an open connection and return its id (no commit of its own)."""
+    src = ensure_entity(c, src)   # returns the display name for this identity
+    dst = ensure_entity(c, dst)
+    # Idempotent by design, in two shapes. Same second: the UNIQUE constraint below. Later
+    # instant: a new valid_from, which used to create a SECOND live edge for the same
+    # (src, predicate, dst) — a slow duplicate, found by CI. A live edge for this triple means
+    # the fact is already asserted, so keep the first and return its id.
+    live = c.execute(
+        "SELECT id FROM edges WHERE src = ? AND predicate = ? AND dst = ? AND valid_to IS NULL",
+        (src, predicate, dst),
+    ).fetchone()
+    if live:
+        return live[0]
+    c.execute(
+        "INSERT INTO edges(src, predicate, dst, note_id, confidence, valid_from, valid_to) "
+        "VALUES(?,?,?,?,?,?,NULL) ON CONFLICT(src, predicate, dst, valid_from) DO NOTHING",
+        (src, predicate, dst, note_id, confidence, at),
+    )
+    eid = c.execute(
+        "SELECT id FROM edges WHERE src = ? AND predicate = ? AND dst = ? AND valid_from = ?",
+        (src, predicate, dst, at),
+    ).fetchone()[0]
+    c.execute("INSERT INTO events(at, kind, detail) VALUES(?,?,?)",
+              (at, "assert", json.dumps({"edge": eid, "src": src, "pred": predicate, "dst": dst,
+                                        "note": note_id}, ensure_ascii=False)))
+    return eid
 
 
 def add_edge(cfg: Config, src: str, predicate: str, dst: str, note_id: str = "",
@@ -79,60 +153,46 @@ def add_edge(cfg: Config, src: str, predicate: str, dst: str, note_id: str = "",
     Raises ValueError for a predicate outside the closed vocabulary unless allow_new_predicate —
     an open predicate space is how a graph rots into 400 spellings of "uses".
     """
-    if predicate not in cfg.predicates and not allow_new_predicate:
-        raise ValueError(
-            f"predicate {predicate!r} is not in the vocabulary; add it to {cfg.config_path} "
-            f"or pass allow_new_predicate=True"
-        )
+    _check_predicate(cfg, predicate, allow_new_predicate)
     at = at or now_iso()
     c = connect(cfg.db_path)
-    with c:
-        src = ensure_entity(c, src)   # returns the display name for this identity
-        dst = ensure_entity(c, dst)
-        # Idempotent by design, in two shapes. Same second: the UNIQUE constraint below. Later
-        # instant: a new valid_from, which used to create a SECOND live edge for the same
-        # (src, predicate, dst) — a slow duplicate, found by CI. A live edge for this triple means
-        # the fact is already asserted, so keep the first and return its id.
-        live = c.execute(
-            "SELECT id FROM edges WHERE src = ? AND predicate = ? AND dst = ? AND valid_to IS NULL",
-            (src, predicate, dst),
-        ).fetchone()
-        if live:
-            return live[0]
-        c.execute(
-            "INSERT INTO edges(src, predicate, dst, note_id, confidence, valid_from, valid_to) "
-            "VALUES(?,?,?,?,?,?,NULL) ON CONFLICT(src, predicate, dst, valid_from) DO NOTHING",
-            (src, predicate, dst, note_id, confidence, at),
-        )
-        eid = c.execute(
-            "SELECT id FROM edges WHERE src = ? AND predicate = ? AND dst = ? AND valid_from = ?",
-            (src, predicate, dst, at),
-        ).fetchone()[0]
-        c.execute("INSERT INTO events(at, kind, detail) VALUES(?,?,?)",
-                  (at, "assert", json.dumps({"edge": eid, "src": src, "pred": predicate, "dst": dst,
-                                            "note": note_id}, ensure_ascii=False)))
-    c.close()
+    try:
+        with c:
+            eid = _assert_edge(c, src, predicate, dst, note_id, confidence, at)
+    finally:
+        c.close()
     return eid
 
 
 def contradict(cfg: Config, old_edge_id: int, src: str, predicate: str, dst: str,
                note_id: str = "", confidence: float = 1.0, at: str | None = None) -> int:
-    """Close `old_edge_id` and assert its replacement in one instant.
+    """Close `old_edge_id` and assert its replacement in ONE transaction.
 
     The replacement inherits the old edge's valid_from for query purposes only if `at` is omitted —
     no: it starts now. History is preserved because the old row keeps its window.
+
+    The replacement is validated BEFORE the old edge is closed, and both writes share one
+    transaction: a rejected replacement (a predicate outside the vocabulary, a destination that
+    names nothing) must leave the old belief live. Closing first and validating after left the
+    graph with a closed belief and no live edge at all.
     """
+    _check_predicate(cfg, predicate)
+    if not (dst or "").strip():
+        raise ValueError("contradict needs a destination to believe in")
     at = at or now_iso()
     c = connect(cfg.db_path)
-    with c:
-        row = c.execute("SELECT id FROM edges WHERE id = ?", (old_edge_id,)).fetchone()
-        if row is None:
-            raise ValueError(f"no edge {old_edge_id}")
-        c.execute("UPDATE edges SET valid_to = ? WHERE id = ? AND valid_to IS NULL", (at, old_edge_id))
-        c.execute("INSERT INTO events(at, kind, detail) VALUES(?,?,?)",
-                  (at, "invalidate", json.dumps({"edge": old_edge_id}, ensure_ascii=False)))
-    c.close()
-    return add_edge(cfg, src, predicate, dst, note_id=note_id, confidence=confidence, at=at)
+    try:
+        with c:
+            row = c.execute("SELECT id FROM edges WHERE id = ?", (old_edge_id,)).fetchone()
+            if row is None:
+                raise ValueError(f"no edge {old_edge_id}")
+            c.execute("UPDATE edges SET valid_to = ? WHERE id = ? AND valid_to IS NULL", (at, old_edge_id))
+            c.execute("INSERT INTO events(at, kind, detail) VALUES(?,?,?)",
+                      (at, "invalidate", json.dumps({"edge": old_edge_id})))
+            eid = _assert_edge(c, src, predicate, dst, note_id, confidence, at)
+    finally:
+        c.close()
+    return eid
 
 
 def invalidate(cfg: Config, edge_id: int, at: str | None = None) -> None:
@@ -212,7 +272,8 @@ def materialize(cfg: Config) -> int:
             other = r["dst"] if r["src"] == e["name"] else r["src"]
             window = f"{r['valid_from'][:10]} → {r['valid_to'][:10] if r['valid_to'] else 'now'}"
             lines.append(f"- {arrow} `{r['predicate']}` [[{other}]] ({window})")
-        (cfg.entities_dir / f"{slug(e['name'])}.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
+        stem = hub_stem(e["name"], e["key"])
+        (cfg.entities_dir / f"{stem}.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
         count += 1
     c.close()
     return count
