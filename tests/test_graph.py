@@ -57,6 +57,51 @@ def test_neighbors_walks_two_hops(cfg):
     assert "fts5" in {n["name"] for n in two["nodes"]}
 
 
+def test_punctuation_variants_are_one_entity(cfg):
+    """Regression: slug() kept separators, so "Next.js" (next-js) and "nextjs" (nextjs) were two nodes."""
+    graph_mod.add_edge(cfg, "Next.js", "depends_on", "react")
+    graph_mod.add_edge(cfg, "nextjs", "used_by", "vercel")       # same identity, other spelling
+    graph_mod.add_edge(cfg, "Next JS", "part_of", "web-stack")   # and again
+    rows = graph_mod.timeline(cfg, "nextjs")
+    assert len(rows) == 3, "all three assertions belong to one node"
+    assert {r["src"] for r in rows} == {"next-js"}, "the first display spelling wins"
+
+
+def test_duplicate_assertion_is_idempotent(cfg):
+    a = graph_mod.add_edge(cfg, "quipu", "depends_on", "sqlite")
+    b = graph_mod.add_edge(cfg, "Quipu", "depends_on", "SQLite")   # same instant, same identity
+    assert a == b
+    assert len(graph_mod.timeline(cfg, "quipu")) == 1
+
+
+def test_identity_ignores_separators_and_accents(cfg):
+    graph_mod.add_edge(cfg, "FTS-5", "used_by", "sqlite")
+    graph_mod.add_edge(cfg, "fts5", "part_of", "sqlite")
+    graph_mod.add_edge(cfg, "Café", "part_of", "quipu")
+    graph_mod.add_edge(cfg, "cafe", "blocks", "quipu")
+    assert len(graph_mod.timeline(cfg, "fts5")) == 2
+    assert len(graph_mod.timeline(cfg, "cafe")) == 2
+
+
+def test_version_qualifier_is_a_different_entity(cfg):
+    """A version is a property of the assertion, not another spelling of the entity."""
+    graph_mod.add_edge(cfg, "Next.js", "depends_on", "react")
+    graph_mod.add_edge(cfg, "Next.js 16", "depends_on", "react")
+    assert len(graph_mod.timeline(cfg, "Next.js")) == 1
+    assert len(graph_mod.timeline(cfg, "Next.js 16")) == 1
+
+
+def test_aliases_are_recorded_for_every_spelling(cfg):
+    from quipu.index import connect
+    graph_mod.add_edge(cfg, "Next.js", "depends_on", "react")
+    graph_mod.add_edge(cfg, "NEXTJS", "used_by", "vercel")
+    c = connect(cfg.db_path)
+    row = c.execute("SELECT name, aliases, key FROM entities WHERE key = 'nextjs'").fetchone()
+    c.close()
+    assert row[0] == "next-js" and row[2] == "nextjs"
+    assert "NEXTJS" in row[1] and "Next.js" in row[1]
+
+
 def test_materialize_writes_entity_hubs(cfg):
     graph_mod.add_edge(cfg, "quipu", "depends_on", "sqlite")
     assert graph_mod.materialize(cfg) == 2

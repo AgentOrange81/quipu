@@ -9,41 +9,66 @@ from __future__ import annotations
 import json
 import re
 import sqlite3
+import unicodedata
 
 from .config import Config
 from .index import connect
 from .store import now_iso
 
 
-def canonical(name: str) -> str:
-    """One spelling per entity: lowercase, whitespace/punctuation collapsed to single hyphens.
-
-    Without this, "DOCP 3200", "docp-3200" and "DOCP3200" become three nodes with one fact between
-    them — the failure mode that makes a hand-built graph useless after a few months.
-    """
-    return slug(name)
-
-
 def slug(name: str) -> str:
+    """Display form: lowercase, punctuation collapsed to single hyphens. NOT the identity."""
     return re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-") or "entity"
 
 
+def identity(name: str) -> str:
+    """The identity key: case-, separator- and accent-insensitive.
+
+    `slug()` alone is not enough and this was a live bug: "Next.js" -> next-js while "nextjs" ->
+    nextjs, so one entity became two nodes — precisely what the old docstring claimed to prevent.
+    Slugging keeps separators, so every punctuation variant is a new node. The key strips them, so
+    "Next.js", "nextjs" and "Next JS" resolve to one entity whose display name is whichever spelling
+    was seen first, with the rest kept as aliases.
+
+    A *version* is a different key on purpose: "Next.js 16" -> nextjs16 stays separate, because a
+    version qualifier is a property of the assertion, not of the entity.
+    """
+    folded = unicodedata.normalize("NFKD", name or "").encode("ascii", "ignore").decode()
+    return re.sub(r"[^a-z0-9]", "", folded.lower()) or "unknown"
+
+
+def canonical(name: str) -> str:
+    return slug(name)
+
+
 def ensure_entity(c: sqlite3.Connection, name: str, kind: str = "thing", aliases=()) -> str:
-    canon = canonical(name)
-    cur = c.execute("SELECT name, aliases FROM entities WHERE name = ?", (canon,))
-    row = cur.fetchone()
+    """Create or find the entity by IDENTITY, return its display name."""
+    name = (name or "").strip()
+    key = identity(name)
+    row = c.execute("SELECT name, aliases, key FROM entities WHERE key = ? OR name = ?",
+                    (key, slug(name))).fetchone()
     if row:
-        if name != canon:  # keep the spelling we saw as an alias, never as a second node
-            seen = set(json.loads(row[1] or "[]"))
-            if name not in seen:
-                seen.add(name)
-                c.execute("UPDATE entities SET aliases = ? WHERE name = ?",
-                          (json.dumps(sorted(seen), ensure_ascii=False), canon))
-        return canon
-    extra = sorted({*aliases, *([name] if name != canon else [])})
-    c.execute("INSERT INTO entities(name, kind, aliases, created) VALUES(?,?,?,?)",
-              (canon, kind, json.dumps(extra, ensure_ascii=False), now_iso()))
-    return canon
+        disp, raw_aliases = row[0], row[1]
+        seen = set(json.loads(raw_aliases or "[]"))
+        if name != disp:
+            seen.add(name)  # keep every spelling we saw, never as a second node
+        c.execute("UPDATE entities SET aliases = ?, key = ? WHERE name = ?",
+                  (json.dumps(sorted(seen), ensure_ascii=False), key, disp))
+        return disp
+    disp = slug(name)
+    extra = sorted({*aliases, *([name] if name != disp else [])})
+    c.execute("INSERT INTO entities(name, kind, aliases, created, key) VALUES(?,?,?,?,?)",
+              (disp, kind, json.dumps(extra, ensure_ascii=False), now_iso(), key))
+    return disp
+
+
+def resolve(cfg: Config, name: str) -> str:
+    """Map any spelling to the stored display name (queries must go through this)."""
+    c = connect(cfg.db_path)
+    row = c.execute("SELECT name FROM entities WHERE key = ? OR name = ?",
+                    (identity(name), slug(name))).fetchone()
+    c.close()
+    return row[0] if row else slug(name)
 
 
 def add_edge(cfg: Config, src: str, predicate: str, dst: str, note_id: str = "",
@@ -60,17 +85,22 @@ def add_edge(cfg: Config, src: str, predicate: str, dst: str, note_id: str = "",
             f"or pass allow_new_predicate=True"
         )
     at = at or now_iso()
-    src, dst = canonical(src), canonical(dst)
     c = connect(cfg.db_path)
     with c:
-        ensure_entity(c, src)
-        ensure_entity(c, dst)
+        src = ensure_entity(c, src)   # returns the display name for this identity
+        dst = ensure_entity(c, dst)
+        # Idempotent by design: a reflection pass that re-asserts an edge must not blow up on the
+        # UNIQUE(src,predicate,dst,valid_from) constraint, and two spellings of one entity now
+        # collapse into exactly that case.
         c.execute(
             "INSERT INTO edges(src, predicate, dst, note_id, confidence, valid_from, valid_to) "
-            "VALUES(?,?,?,?,?,?,NULL)",
+            "VALUES(?,?,?,?,?,?,NULL) ON CONFLICT(src, predicate, dst, valid_from) DO NOTHING",
             (src, predicate, dst, note_id, confidence, at),
         )
-        eid = c.execute("SELECT last_insert_rowid()").fetchone()[0]
+        eid = c.execute(
+            "SELECT id FROM edges WHERE src = ? AND predicate = ? AND dst = ? AND valid_from = ?",
+            (src, predicate, dst, at),
+        ).fetchone()[0]
         c.execute("INSERT INTO events(at, kind, detail) VALUES(?,?,?)",
                   (at, "assert", json.dumps({"edge": eid, "src": src, "pred": predicate, "dst": dst,
                                             "note": note_id}, ensure_ascii=False)))
@@ -116,7 +146,7 @@ def invalidate(cfg: Config, edge_id: int, at: str | None = None) -> None:
 
 def timeline(cfg: Config, entity: str, at: str | None = None) -> list[dict]:
     """Edges touching `entity`, optionally as known at a point in time."""
-    entity = canonical(entity)
+    entity = resolve(cfg, entity)
     c = connect(cfg.db_path)
     if at:
         rows = c.execute(
@@ -134,7 +164,7 @@ def timeline(cfg: Config, entity: str, at: str | None = None) -> list[dict]:
 
 def neighbors(cfg: Config, entity: str, depth: int = 1) -> dict:
     """BFS over live edges. Returns {"nodes": [...], "edges": [...]}."""
-    entity = canonical(entity)
+    entity = resolve(cfg, entity)
     seen = {entity}
     edges: list[dict] = []
     frontier = [entity]

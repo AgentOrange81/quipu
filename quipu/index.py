@@ -20,7 +20,8 @@ CREATE VIRTUAL TABLE IF NOT EXISTS entries_fts USING fts5(
 
 CREATE TABLE IF NOT EXISTS entities(
   id INTEGER PRIMARY KEY, name TEXT NOT NULL UNIQUE, kind TEXT DEFAULT 'thing',
-  aliases TEXT DEFAULT '[]', created TEXT);
+  aliases TEXT DEFAULT '[]', created TEXT, key TEXT);
+CREATE INDEX IF NOT EXISTS entities_key ON entities(key);
 
 CREATE TABLE IF NOT EXISTS edges(
   id INTEGER PRIMARY KEY, src TEXT NOT NULL, predicate TEXT NOT NULL, dst TEXT NOT NULL,
@@ -40,6 +41,9 @@ def connect(db: str | Path) -> sqlite3.Connection:
     c = sqlite3.connect(db)
     c.row_factory = sqlite3.Row
     c.executescript(SCHEMA)
+    # a db written before the identity key existed: add the column; ensure_entity backfills it
+    if "key" not in {r[1] for r in c.execute("PRAGMA table_info(entities)")}:
+        c.execute("ALTER TABLE entities ADD COLUMN key TEXT")
     return c
 
 
