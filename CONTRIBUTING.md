@@ -10,6 +10,41 @@ make test
 make lint
 ```
 
+## Git workflow
+
+`main` is protected: no direct pushes, squash-merge only, linear history, force-push and deletion
+blocked. Every change is an issue → a branch → a PR → a review → a squash.
+
+```
+main
+ └── feat/<issue>-<slug>     one branch per issue, short-lived
+      └── PR → review checklist → squash merge → branch deleted
+```
+
+- **Branch prefix** matches the commit type: `feat/`, `fix/`, `docs/`, `test/`, `ci/`, `chore/`,
+  `refactor/`, `perf/`.
+- **Commit messages** are conventional commits; the body explains *why* and names the failure it
+  prevents.
+- **One task in flight.** One branch with code changes open at a time. Finish → verify → merge →
+  then open the next. Parallel code streams on one codebase is how a project dissolves.
+- **Exclusive path ownership per task**, declared in the issue. Source trees, tests, and docs have
+  different owners and never overlap on the same branch.
+- **The gate is quoted, not described.** A PR says `34 passed` with the command, not "tests pass".
+
+### Who does what
+
+| role | owns | never does |
+|---|---|---|
+| **orchestrator** (glitch) | verification, commits, merges, releases, anything live | hand-writes feature code while a builder is idle |
+| **builder** (cipher) | `quipu/**` on its branch | commit, push, merge, touch `tests/` or `docs/` |
+| **QA** (vector) | `tests/**`, gate scripts, adversarial review of the builder's diff | verify its own code, or the builder verify its own tests |
+| **writer** (glyph) | `docs/**`, README, PLAN, release notes | change behaviour, or edit code |
+| **research** (grok) | `benchmarks/**`, external surveys, measurement reports | land code without a review |
+
+A worker never commits and never verifies its own work: the builder writes code, QA's tests are the
+gate, the orchestrator runs the gate and commits. That rule exists because a worker's "tests pass" is
+a self-report — it has already been wrong here once.
+
 ## Rules
 
 1. **Markdown is the source of truth.** Anything that can only be reconstructed from SQLite is a bug.
