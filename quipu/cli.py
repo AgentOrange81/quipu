@@ -139,21 +139,8 @@ def cmd_write(args) -> int:
 
 
 def _dedupe_proposals(proposals):
-    """Union the per-chunk proposals, dropping a summary a previous chunk already produced.
-
-    Chunking sends overlapping context to the same model, so the same claim can come back twice. The
-    key is the summary with whitespace collapsed and case folded: the reflection pass writes the
-    summary itself, so two spellings of one claim are one claim.
-    """
-    seen: set[str] = set()
-    kept = []
-    for proposal in proposals:
-        key = " ".join(str(proposal.summary).split()).lower()
-        if key in seen:
-            continue
-        seen.add(key)
-        kept.append(proposal)
-    return kept
+    """Kept as the CLI's name for the shared rule; the implementation lives in promote (#2)."""
+    return promote_mod.dedupe_proposals(proposals)
 
 
 def cmd_reflect(args) -> int:

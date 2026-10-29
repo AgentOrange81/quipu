@@ -115,7 +115,7 @@ def run(cfg, transcript: str | Path, provider, agent: str = "", project: str = "
                           seconds=time.monotonic() - started)
 
     chunks = promote_mod.chunk_transcript(text, max_chars)
-    proposals = _reflect_bounded(chunks, cfg, provider, timeout)
+    proposals = promote_mod.dedupe_proposals(_reflect_bounded(chunks, cfg, provider, timeout))
     # nothing is written until the model has answered in full: a transport error above leaves the
     # vault exactly as it was, which is what "no partial entry" means
     written = promote_mod.apply(proposals, cfg, agent=agent, project=project,

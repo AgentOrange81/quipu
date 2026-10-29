@@ -274,6 +274,25 @@ def parse_response(raw: str) -> list[Proposal]:
     return [Proposal.from_json(d) for d in items if isinstance(d, dict) and d.get("summary")]
 
 
+def dedupe_proposals(proposals: list) -> list:
+    """Union per-chunk proposals, dropping a summary an earlier chunk already produced.
+
+    Chunking sends neighbouring context to the same model, so one claim can come back twice — and a
+    chunked pass that writes it twice turns a clean corpus into a pile of near-duplicates. The key is
+    the summary with whitespace collapsed and case folded: the reflection pass writes that summary
+    itself, so two spellings of one claim are one claim.
+    """
+    seen: set[str] = set()
+    kept = []
+    for proposal in proposals:
+        key = " ".join(str(proposal.summary).split()).lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        kept.append(proposal)
+    return kept
+
+
 def reflect(transcript: str, cfg: Config, provider, existing: list[str] | None = None) -> list[Proposal]:
     return parse_response(provider.complete(build_prompt(transcript, cfg, existing)))
 

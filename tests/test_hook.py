@@ -126,6 +126,21 @@ def test_an_empty_transcript_is_a_failure(tmp_path):
     assert "empty transcript" in str(caught.value)
 
 
+def test_a_chunked_pass_writes_one_entry_per_claim_not_one_per_chunk(tmp_path):
+    """Real data caught this: at --max-chars 1500 a 14 KB transcript became 8 chunks and the same fake
+    proposal was written 8 times. Chunking must not turn one claim into a pile of near-duplicates."""
+    cfg = load(tmp_path / "vault", create=True)
+    turns = "\n".join(f"user: turn {i} " + "x" * 180 for i in range(12))
+    transcript = tmp_path / "long.md"
+    transcript.write_text(turns, encoding="utf-8")
+
+    result = hook_mod.run(cfg, transcript, _fake(tmp_path), max_chars=400)
+
+    assert result.chunks > 1, "the fixture must actually chunk, or this test proves nothing"
+    assert result.proposed == 1, f"the same summary came back {result.proposed} times"
+    assert len(_entries(cfg)) == 1, "one claim must be one entry, however many chunks saw it"
+
+
 # --- the exit codes are the contract: a framework reads nothing else -------------------
 
 
