@@ -72,8 +72,24 @@ nothing about which part of retrieval is weak.
 
 ## Results
 
-From `results/synthetic-bm25-2026-10-28.json` (corpus `synthetic v1`, 200 notes, 100 queries,
-git `77b5dd3`, run 2026-10-28):
+From `results/synthetic-weighted-thin-2026-10-28.json` (corpus `synthetic v1`, 200 notes, 100
+queries, git `af2a53f`, run 2026-10-29):
+
+| | R@5 | R@10 | MRR |
+|---|---|---|---|
+| **all queries** | **0.64** | **0.90** | **0.3182** |
+| rare | 0.56 | 1.00 | 0.2779 |
+| phrase | 1.00 | 1.00 | 0.4300 |
+| paraphrase | 0.48 | 0.60 | 0.2680 |
+| question | 0.52 | 1.00 | 0.2971 |
+
+Ten of the 100 queries still miss, and **all ten are `paraphrase`**: the note that answers the
+question never uses the asker's words. That is the vocabulary gap an embedding or hybrid ranker
+exists to close (PLAN.md M2), not something a better lexical weighting reaches.
+
+From `results/synthetic-bm25-2026-10-28.json` (git `77b5dd3`, run 2026-10-28) — the same harness
+before #25, #31 and #43 landed, kept because a score nobody can compare is a score nobody can
+audit:
 
 | | R@5 | R@10 | MRR |
 |---|---|---|---|
@@ -83,10 +99,12 @@ git `77b5dd3`, run 2026-10-28):
 | paraphrase | 0.40 | 0.48 | 0.2433 |
 | question | 0.00 | 0.00 | 0.0000 |
 
-### What the misses have in common
+### What the misses had in common (the 2026-10-28 run)
 
-38 of the 100 queries did not return their answer within the top 10. They fail in three distinct
-ways, and all three are properties of the retrieval stack, not of the corpus:
+38 of the 100 queries did not return their answer within the top 10 in the first run of this
+harness. They failed in three distinct ways, all properties of the retrieval stack rather than of
+the corpus, and two of the three are now fixed — the list is kept because the fix is only credible
+next to the failure it removed:
 
 1. **One absent word kills the whole query (25 queries, the `question` kind).** `_fts_query`
    joins every token with `AND`, and the last token is a prefix match. A question contains an
@@ -94,20 +112,58 @@ ways, and all three are properties of the retrieval stack, not of the corpus:
    at all - zero results, not bad results. This is the single biggest lever in the table, and it
    is why `docs/USING.md` tells an agent to search with a topic phrase (`quipu search "DOCP"`)
    rather than with the question. The matcher does not stopwords, does not OR, and does not fall
-   back to a partial match when a token is unknown.
+   back to a partial match when a token is unknown. **Fixed** (#25, #43): an empty AND result
+   falls back to the OR ranking, and a *thin* one is topped up from it — question R@5 0.00 -> 0.52,
+   R@10 0.00 -> 1.00.
 2. **The vocabulary is the note's, not the asker's (13 queries, the `paraphrase` kind).** The
    query returns three notes that carry both synonyms - the right area, the wrong note - and the
    gold note is missing because that note never used the synonym the asker used. All 13 of those
    misses never retrieve the gold at any rank up to 10. This is the failure an embedding or
-   hybrid ranker would fix, and it is exactly the gap PLAN.md M2 names.
+   hybrid ranker would fix, and it is exactly the gap PLAN.md M2 names. **Not fixed**: these are
+   the only ten misses left.
 3. **Near-duplicate notes win on length (9 of the `rare` queries, all recovered by k=10).** Every
    `rare` gold is inside the top 10; 36% of them fall out of the top 5 because seven shorter
    notes in the same cluster mention the same terms more densely. BM25's length normalisation
    prefers them. The `phrase` kind shows the same effect at rank 1: R@5 is 1.00 but MRR is only
-   0.43, so the right note is usually found and usually not first.
+   0.43, so the right note is usually found and usually not first. **Partly fixed** (#31): the
+   column weights moved the answer above a body-only match, and lifted live-vault rank-1 precision
+   from 5/10 to 9/10, but on this corpus phrase MRR is unchanged at 0.43 — the length bias inside
+   one column is still BM25's.
 
 The two kinds that work are the two where the query's words are literally in the note. The
 retriever currently reads the corpus; it does not yet understand the question.
+
+## The live vault, which is not a synthetic corpus
+
+`benchmarks/live_queries.py` runs ten hand-judged questions against a COPY of a real vault and
+prints rank 1 for each. It exists because the synthetic corpus is too kind: every cluster shares a
+rare marker term with its gold note, so it cannot reproduce the failure that started this — an
+850-note vault where an agent asks a question and gets a pasted transcript as the answer.
+
+    cp -a ~/quipu-vault /tmp/livevault
+    .venv/bin/python -m benchmarks.live_queries /tmp/livevault
+
+Measured on the live vault (850 notes, 10 questions, 2026-10-29), rank 1 correct / rank 1 promoted
+/ rows returned for a five-slot ask:
+
+| variant | rank 1 correct | rank 1 promoted |
+|---|---|---|
+| AND only, flat columns (before #31/#43) | 5/10 | 6/10 |
+| AND only, weighted columns | 6/10 | 6/10 |
+| thin AND, flat columns | 6/10 | 4/10 |
+| thin AND, weighted columns (shipped) | 9/10 | 6/10 |
+| thin AND, weighted + raw demoted x0.5 | 8/10 | 9/10 |
+
+Two things a reader should take from that table. The shipped combination is chosen on the harness
+tie-break, not by the live set: ten hand-judged questions overfit, and a sharper weight set scored
+10/10 here while losing 0.002 MRR on 100 queries. And the last row is the honest near-miss — a
+state-based demotion would put a promoted claim at rank 1 for nine of ten questions, but it costs
+phrase recall on the harness (1.00 -> 0.76) because an exact-phrase answer is sometimes a raw
+capture. Junk summaries belong to #30, not to a multiplier on state.
+
+`benchmarks/sweep_retrieval.py` is the other instrument: it installs each variant over the shipped
+`search` and prints every one, so a weighting that fails the measurement gets reverted in public
+rather than quietly kept.
 
 ## Honesty rules
 
@@ -133,6 +189,11 @@ retriever currently reads the corpus; it does not yet understand the question.
     .venv/bin/python -m pytest -q                 # the shipped suite stays green
     .venv/bin/python -m pytest benchmarks/tests -q   # the harness's own tests
     .venv/bin/python -m ruff check .
+
+    # the variants behind the shipped weights, and the live-vault check
+    .venv/bin/python -m benchmarks.sweep_retrieval
+    cp -a ~/quipu-vault /tmp/livevault
+    .venv/bin/python -m benchmarks.live_queries /tmp/livevault
 
 The harness's own tests live in `benchmarks/tests/` so the shipped suite (`tests/`) stays
 untouched. They pin the three things a number depends on: the corpus is deterministic, the

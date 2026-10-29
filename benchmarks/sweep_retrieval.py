@@ -89,7 +89,7 @@ def main():
     dataset = load_synthetic()
     rows = []
     variants = [("and_only", "flat", None)]
-    for name, w in WEIGHT_SETS.items():
+    for name in WEIGHT_SETS:
         if name != "flat":
             variants.append(("and_only", name, None))
     for name in ("mild", "shipped", "sharp", "summary_only", "ask_heavy", "mid", "mid2"):
@@ -110,7 +110,7 @@ def main():
         print(f"{label:<32} R@5={r5:.3f} R@10={r10:.3f} MRR={mrr:.3f} "
               + " ".join(f"{k[:4]}={v:.2f}" for k, v in sorted(kinds.items())))
     print("\nbest by R@5:")
-    for r5, label, r10, mrr, kinds in sorted(rows, reverse=True)[:5]:
+    for r5, label, r10, mrr, _kinds in sorted(rows, reverse=True)[:5]:
         print(f"  {label:<32} R@5={r5:.3f} R@10={r10:.3f} MRR={mrr:.3f}")
 
 
