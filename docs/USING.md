@@ -119,6 +119,46 @@ transaction. Edges are never deleted; the closed row keeps its window and `quipu
 it `"live": false`. `quipu audit` reports any superseded entry whose edge is still live, which is
 the shape a vault written by an older quipu is in.
 
+## Optional semantic search
+
+`quipu search` is lexical (SQLite FTS5 + bm25) and works with nothing else installed. When a vault's
+entries use different words from the questions you ask, you can add embeddings from any local
+OpenAI-compatible endpoint — quipu itself still has zero dependencies, it just POSTs text:
+
+Start any OpenAI-compatible `/v1/embeddings` service on the box first — llama.cpp's server in
+embedding mode with mean pooling (a `nomic-embed-text-v1.5` f16 GGUF on CPU is enough: 858 entries
+embedded in 37 s), ollama, or anything else speaking that shape. Then:
+
+```bash
+quipu --vault ~/vault embed --url http://127.0.0.1:8083/v1/embeddings --model nomic-embed
+quipu --vault ~/vault search "did we already try the other approach" --hybrid \
+  --embed-url http://127.0.0.1:8083/v1/embeddings --embed-model nomic-embed
+```
+
+Or put the endpoint in `.quipu/config.toml` and drop the flags:
+
+```toml
+[embed]
+url = "http://127.0.0.1:8083/v1/embeddings"
+model = "nomic-embed"
+```
+
+`embed` is idempotent — it re-embeds only entries whose text changed, so it is cheap to re-run after a
+`reindex`. Vectors live in `.quipu/index.db` and are derived data: losing the index costs one re-embed,
+never a memory, and `--hybrid` with no vectors or no endpoint falls back to the lexical ranking and says
+why on stderr.
+
+**When it helps, measured** on the 100-query synthetic harness (200 notes, nomic-embed-text-v1.5 on
+CPU): R@5 0.640 -> 0.760, MRR 0.318 -> 0.383, and the gain lands exactly where lexical search is blind
+— `question`-shaped queries 0.52 -> 0.76, `rare` 0.56 -> 0.72, `paraphrase` 0.48 -> 0.56 — while exact
+phrases stay at 1.00 because the fusion keeps the lexical ranking at 20% of the weight.
+
+**When it does not.** On a curated vault whose entries already carry the asker's words, bm25 is
+saturated and semantic neighbours can surface a note that is topically right and factually stale — on
+the live 850-entry vault the ten hand-judged questions scored 8/10 under hybrid against 10/10 under
+bm25. Semantic similarity has no notion of "that was superseded"; the graph does. Use `--hybrid` for
+questions that share no vocabulary with the corpus, not as a default.
+
 ## Exporting
 
 | command | when you want it | what each record carries |

@@ -165,6 +165,30 @@ capture. Junk summaries belong to #30, not to a multiplier on state.
 `search` and prints every one, so a weighting that fails the measurement gets reverted in public
 rather than quietly kept.
 
+### Semantic retrieval, fused with bm25 (#5)
+
+`results/synthetic-hybrid-2026-10-29.json`, produced by `benchmarks/sweep_hybrid.py` against a local
+`llama-server --embeddings` running `nomic-embed-text-v1.5.f16` on CPU:
+
+| retriever | R@5 | R@10 | MRR | para / phrase / question / rare R@5 |
+|---|---|---|---|---|
+| bm25 (shipped) | 0.640 | 0.900 | 0.318 | 0.48 / 1.00 / 0.52 / 0.56 |
+| vector only | 0.770 | 0.920 | 0.393 | 0.56 / 0.96 / 0.80 / 0.76 |
+| rrf, vector 0.5 | 0.700 | 0.920 | 0.338 | 0.56 / 1.00 / 0.64 / 0.60 |
+| rrf, vector 0.65 | 0.750 | 0.920 | 0.366 | 0.56 / 1.00 / 0.76 / 0.68 |
+| **rrf, vector 0.8 (shipped)** | **0.760** | **0.910** | **0.383** | **0.56 / 1.00 / 0.76 / 0.72** |
+| rrf, vector 0.9 | 0.770 | 0.910 | 0.391 | 0.56 / 0.96 / 0.80 / 0.76 |
+
+Pure vector retrieval has the best headline number and gives up exact-phrase recall (1.00 -> 0.96) —
+the one query shape where lexical matching is simply right. 0.8 keeps phrase at 1.00 for 0.01 R@5,
+which is the trade the shipped fusion takes. `--hybrid` is opt-in for that reason, and on the curated
+live vault (ten hand-judged questions) it scored 8/10 against bm25's 10/10: semantic neighbours do not
+know which claim was superseded.
+
+An earlier attempt with a chat model as the embedder (Qwen3-4B, mean pooling) scored vector-only 2/10
+on the live questions — a decoder model's pooled states are not an embedding space. Use a real
+embedding model.
+
 ### Rejected: query shaping and focus scoring (#48)
 
 A blob — a session report, or a multi-topic "pack" entry — can outrank a focused note for any single

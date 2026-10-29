@@ -6,6 +6,19 @@ truth and a migration is the user's data.
 
 ## Unreleased
 
+### Added
+
+- **Optional semantic search** (`quipu embed`, `quipu search --hybrid`, #5). Vectors come from any
+  OpenAI-compatible `/v1/embeddings` endpoint over plain `urllib` — the package still has zero runtime
+  dependencies — and are stored in the disposable index. Search fuses the lexical ranking with the
+  vector one by weighted reciprocal rank fusion (vector 0.8 / lexical 0.2, k=60, both measured). Off by
+  default, degrades to lexical with a reason on stderr when there are no vectors or no endpoint.
+  Measured on the synthetic harness (nomic-embed-text-v1.5 f16, CPU, 858 entries in 37 s): R@5 0.640 ->
+  0.760, MRR 0.318 -> 0.383, question-shaped R@5 0.52 -> 0.76, exact-phrase R@5 held at 1.00. On the
+  curated live vault hybrid scored 8/10 against bm25's 10/10 on ten hand-judged questions — semantic
+  neighbours cannot tell a stale claim from a current one, so it is an opt-in tool for questions that
+  share no words with the corpus, not a new default.
+
 ### Fixed
 
 - `write --supersedes` now closes the live graph edges of the entry it corrects, dated at the moment the
