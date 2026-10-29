@@ -129,32 +129,69 @@ def _fts_query_or(q: str) -> str:
     return " OR ".join([f'"{t}"' for t in toks[:-1]] + [f'"{toks[-1]}"*'])
 
 
+#: bm25 weights, one per FTS column, in schema order: (summary, ask, evidence, body). FTS5 scores a
+#: match wherever it lands, so before this an entry whose BODY happened to contain the query words
+#: outranked the entry whose SUMMARY was the answer — the measured symptom was a hardware question
+#: answered with a pasted transcript at rank 1 (#31). The summary is the entry's retrieval handle and
+#: weighs most; `ask` next (it is the question the entry answers, which is what an agent's query looks
+#: like), then evidence, then body. Tuned against `benchmarks/sweep_retrieval.py` (synthetic, 100
+#: queries) and `benchmarks/live_queries.py` (the ten hand-judged questions that found the defect):
+#: synthetic R@5 0.640 / R@10 0.900 / MRR 0.318 against 0.640 / 0.870 / 0.320 for the unweighted
+#: baseline, and live rank-1 correct 9/10 against 5/10. A sharper weight set scored higher on the live
+#: set and worse on the harness; the harness wins ties because ten hand-judged questions overfit.
+COLUMN_WEIGHTS = {"summary": 10.0, "ask": 4.0, "evidence": 2.0, "body": 0.5}
+
+#: How far past the caller's `limit` each query shape may scan before the thin-AND top-up. Wide enough
+#: that a relevant OR hit does not have to be in the first `limit` of the loose ranking, narrow enough
+#: that the cost stays a handful of rows on a corpus of thousands.
+CANDIDATE_WINDOW = 4
+
+
+def _scan(c: sqlite3.Connection, match: str, where: list[str], params: list, limit: int) -> list[dict]:
+    """One bm25 query with the column weights applied. `match` is a whole FTS expression."""
+    clauses = ["entries_fts MATCH ?"] + where
+    sql = ("SELECT e.*, snippet(entries_fts, 0, '<<', '>>', '…', 14) AS snip, "
+           "bm25(entries_fts, ?, ?, ?, ?) AS score "
+           "FROM entries_fts JOIN entries e ON e.rowid = entries_fts.rowid "
+           "WHERE " + " AND ".join(clauses) + " ORDER BY score LIMIT ?")
+    weights = [COLUMN_WEIGHTS["summary"], COLUMN_WEIGHTS["ask"], COLUMN_WEIGHTS["evidence"],
+               COLUMN_WEIGHTS["body"]]
+    return [dict(r) for r in c.execute(sql, weights + [match] + params + [limit]).fetchall()]
+
+
 def search(db: str | Path, query: str, kind: str | None = None, state: str | None = None,
            agent: str | None = None, project: str | None = None, limit: int = 10) -> list[dict]:
+    """Rank entries for `query`. AND first, then topped up from the OR ranking (#43).
+
+    Every token is ANDed, which is precise and, for a question-shaped query, nearly empty: one word
+    ("why", "did") in no note at all used to produce nothing, and the OR fallback that fixed that
+    (#25) only ran on an EMPTY result. One rare token sitting in one unrelated note therefore
+    satisfied the AND, the fallback never fired, and the caller got a one-row answer that looked
+    complete. The AND ranking still comes first — a note matching every token beats a note sharing
+    one — but when it is shorter than the caller asked for, the remaining slots are filled from the
+    OR ranking, so the answer is somewhere in the list instead of absent from it.
+    """
     c = connect(db)
-    match = _fts_query(query)
+    match, loose = _fts_query(query), _fts_query_or(query)
     if not match:
         c.close()
         return []
-    where = ["entries_fts MATCH ?"]
-    params: list = [match]
+    where: list[str] = []
+    params: list = []
     for col, val in (("kind", kind), ("state", state), ("agent", agent), ("project", project)):
         if val:
             where.append(f"e.{col} = ?")
             params.append(val)
-    sql = ("SELECT e.*, snippet(entries_fts, 0, '<<', '>>', '…', 14) AS snip, bm25(entries_fts) AS score "
-           "FROM entries_fts JOIN entries e ON e.rowid = entries_fts.rowid "
-           "WHERE " + " AND ".join(where) + " ORDER BY rank LIMIT ?")
-    out = [dict(r) for r in c.execute(sql, params + [limit]).fetchall()]
-    if not out:
-        # ANDing every token meant one word absent from every note emptied the result set, so a
-        # question-shaped query - the shape an agent actually uses - scored 0.00. Fall back to
-        # the same terms ORed and let BM25 rank them (#25).
-        loose = _fts_query_or(query)
-        if loose:
-            out = [dict(r) for r in c.execute(sql, [loose] + params[1:] + [limit]).fetchall()]
-    c.close()
-    return out
+    window = max(limit * CANDIDATE_WINDOW, limit)
+    try:
+        rows = _scan(c, match, where, params, window)
+        if loose and loose != match and len(rows) < limit:
+            seen = {r["id"] for r in rows}
+            rows += [r for r in _scan(c, loose, where, params, window) if r["id"] not in seen]
+    finally:
+        c.close()
+    rows.sort(key=lambda r: r["score"])
+    return rows[:limit]
 
 
 def stats(db: str | Path) -> dict:

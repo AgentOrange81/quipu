@@ -13,6 +13,16 @@ truth and a migration is the user's data.
   history (#20). An edge the correction restates is left live — restating a fact changes its carrier, not
   the belief. `quipu audit` reports any superseded entry whose edge is still live, which is what a vault
   written by an older version looks like.
+- Retrieval ranks by WHERE a match landed, not just by whether there was one: bm25 now takes per-column
+  weights (`summary` 10, `ask` 4, `evidence` 2, `body` 0.5), so a note whose body merely contains the
+  query words no longer outranks the note whose summary is the claim (#31). On the live 850-note vault
+  rank 1 is a correct answer for 9 of 10 hand-judged questions instead of 5; on the synthetic harness
+  R@5 0.64 / R@10 0.90 / MRR 0.3182 (0.640 / 0.870 / 0.320 before).
+- A thin AND result is topped up from the OR ranking instead of being returned as if complete: one rare
+  token in one unrelated note used to satisfy the AND and suppress the OR fallback entirely, giving a
+  one-row answer that looked finished (#43). The AND ranking still comes first, and the caller's `limit`
+  and filters still apply. Question-shaped recall on the harness: R@5 0.52, R@10 1.00 (0.00 / 0.00 at the
+  alpha tag).
 
 ## 0.2.0-alpha — 2026-10-29
 
