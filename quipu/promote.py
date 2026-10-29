@@ -31,21 +31,47 @@ TURN_ROLES = ("user", "assistant", "system", "tool", "human")
 _TURN_LINE = re.compile(r"^(user|assistant|system|tool|human):\s", re.I)
 
 
-def load_transcript(source: str | Path) -> str:
+@dataclass
+class LoadStats:
+    """What the last load did with the file it was given.
+
+    A corrupt line is skipped, never fatal — but it is counted, because a session that quietly lost
+    half its lines is a session that lies.
+    """
+    messages: int = 0
+    malformed: int = 0
+    skipped: int = 0
+
+    def reset(self) -> None:
+        self.messages = 0
+        self.malformed = 0
+        self.skipped = 0
+
+
+#: The counts from the most recent `load_transcript` call.
+LAST_LOAD_STATS = LoadStats()
+
+
+def load_transcript(source: str | Path, stats: LoadStats | None = None) -> str:
     """Read a session file — or a transcript already in hand — into plain `role: text` lines (#2).
 
     Two shapes arrive in practice and they want different treatment:
 
-    * **Hermes session JSONL** (`.jsonl`, or content that sniffs as one): one JSON object per line with
-      `role` and `content`, where `content` is a string or a list of `{"type": "text", "text": ...}`
-      parts. Rendered as `role: text`, parts of one message joined with a single space.
+    * **Hermes session JSONL** (`.jsonl`, or content that sniffs as one): one JSON object per line
+      with `role` and `content`, where `content` is a string or a list of `{"type": "text",
+      "text": ...}` parts. Rendered as `role: text`, parts of one message joined with a single space.
     * **Anything else** (markdown, a pasted transcript): passed through untouched, because a human
       already chose its shape.
 
     A row that is not a message (`type: meta`), a malformed line, and a message with no text are
     skipped rather than fatal: a session file with one corrupt line is still a session. An empty or
     missing file IS fatal — a pass over nothing must not look like a pass.
+
+    What was skipped is counted: in `stats` when the caller passes one, otherwise in the module's
+    `LAST_LOAD_STATS` — exactly one of the two, never silently neither.
     """
+    counts = stats if stats is not None else LAST_LOAD_STATS
+    counts.reset()
     if isinstance(source, Path):
         path: Path | None = source
         text = ""
@@ -74,11 +100,14 @@ def load_transcript(source: str | Path) -> str:
         try:
             row = json.loads(line)
         except ValueError:
+            counts.malformed += 1
             continue  # one corrupt line is not a broken session
         if not isinstance(row, dict):
+            counts.skipped += 1
             continue
         role = str(row.get("role") or "").lower()
         if role not in TURN_ROLES:
+            counts.skipped += 1
             continue  # meta/control rows are not conversation
         content = row.get("content")
         if isinstance(content, str):
@@ -88,10 +117,14 @@ def load_transcript(source: str | Path) -> str:
                      if isinstance(p, dict)
                      and p.get("type", "text") in ("text", "input_text", "output_text")]
         else:
+            counts.skipped += 1
             continue
         message = re.sub(r"\s+", " ", " ".join(str(p) for p in parts if p)).strip()
-        if message:
-            lines.append(f"{role}: {message}")
+        if not message:
+            counts.skipped += 1
+            continue
+        lines.append(f"{role}: {message}")
+        counts.messages += 1
     if not lines:
         raise ValueError(f"no messages in transcript: {path or '<text>'}")
     return "\n".join(lines)
@@ -133,7 +166,7 @@ def chunk_transcript(text: str, max_chars: int = 24000) -> list[str]:
 
     lines = text.split("\n")
     blocks: list[list[str]] = []
-    if sum(1 for line in lines if _TURN_LINE.match(line)) >= 2:
+    if sum(1 for line in lines if _TURN_LINE.match(line)) >= 1:
         for line in lines:
             if not blocks or _TURN_LINE.match(line):
                 blocks.append([line])
@@ -228,17 +261,26 @@ class HttpProvider:
             "temperature": 0.2,
             "stream": False,
         }).encode()
+        url = f"{self.base_url}/chat/completions"
         req = urllib.request.Request(
-            f"{self.base_url}/chat/completions", data=body,
+            url, data=body,
             headers={"Content-Type": "application/json",
                      **({"Authorization": f"Bearer {self.api_key}"} if self.api_key else {})},
         )
         try:
             with urllib.request.urlopen(req, timeout=self.timeout) as r:
-                data = json.loads(r.read())
+                raw = r.read()
+        except urllib.error.HTTPError as exc:  # a status code, not a transport failure
+            raise RuntimeError(f"LLM request failed: {url}: HTTP {exc.code} {exc.reason}") from exc
         except urllib.error.URLError as exc:
-            raise RuntimeError(f"LLM request failed: {exc} (endpoint {self.base_url})") from exc
-        return data["choices"][0]["message"]["content"]
+            raise RuntimeError(f"LLM request failed: {url}: {exc}") from exc
+        except OSError as exc:  # a socket timeout surfaces here, not as a URLError
+            raise RuntimeError(f"LLM request failed: {url}: {type(exc).__name__}: {exc}") from exc
+        try:
+            data = json.loads(raw)
+            return data["choices"][0]["message"]["content"]
+        except (ValueError, KeyError, IndexError, TypeError) as exc:
+            raise RuntimeError(f"LLM request failed: {url}: bad response: {exc}") from exc
 
 
 def build_prompt(transcript: str, cfg: Config, existing: list[str] | None = None) -> str:

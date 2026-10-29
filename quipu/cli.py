@@ -178,6 +178,8 @@ def cmd_reflect(args) -> int:
     except ValueError as exc:
         print(str(exc), file=sys.stderr)
         return 2
+    if promote_mod.LAST_LOAD_STATS.malformed:
+        print(f"{promote_mod.LAST_LOAD_STATS.malformed} malformed lines skipped", file=sys.stderr)
     existing = [e.summary for _p, e in iter_entries(cfg.root) if e.state == "promoted"]
     chunks = promote_mod.chunk_transcript(transcript, args.max_chars)
     provider = _provider(args, cfg)
@@ -186,7 +188,10 @@ def cmd_reflect(args) -> int:
         for number, chunk in enumerate(chunks, 1):
             got = promote_mod.reflect(chunk, cfg, provider, existing)
             if len(chunks) > 1:
-                print(f"chunk {number}/{len(chunks)}: {len(got)} proposals")
+                # the dry-run contract is ONE json document on stdout, so the breakdown goes to
+                # stderr there; a normal run keeps its breakdown where the operator reads it
+                print(f"chunk {number}/{len(chunks)}: {len(got)} proposals",
+                      file=sys.stderr if args.dry_run else sys.stdout)
             proposals.extend(got)
     except Exception as exc:  # a failed pass is a non-zero exit with the reason, never a traceback
         print(f"reflect failed at {cfg.llm_base_url}: {type(exc).__name__}: {exc}", file=sys.stderr)

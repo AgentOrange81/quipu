@@ -54,16 +54,16 @@ class HookResult:
 
 
 def read_transcript(source: str | Path, stdin=None) -> str:
-    """A path, or `-` for stdin. A missing file is a failure, not an empty pass."""
+    """A path, or `-` for stdin, read through the shared loader (#2).
+
+    The loader turns a Hermes session JSONL into `role: text` turns and passes markdown through
+    untouched, so the hook and `reflect` read the same transcript the same way — and a session file
+    reaches the model as turns, not as raw JSON lines. The loader raises `ValueError`; `run` speaks
+    it as a `HookError`, so the hook still has exactly one exception type.
+    """
     if str(source) == "-":
-        return (stdin or sys.stdin).read()
-    path = Path(source)
-    if not path.exists():
-        raise HookError(f"transcript not found: {path}")
-    try:
-        return path.read_text(encoding="utf-8", errors="replace")
-    except OSError as exc:
-        raise HookError(f"cannot read transcript {path}: {exc}") from exc
+        return promote_mod.load_transcript((stdin or sys.stdin).read())
+    return promote_mod.load_transcript(Path(source))
 
 
 def _existing(cfg) -> list[str]:
@@ -106,15 +106,17 @@ def run(cfg, transcript: str | Path, provider, agent: str = "", project: str = "
         session: str = "", timeout: float = DEFAULT_TIMEOUT, dry_run: bool = False,
         stdin=None, max_chars: int = 24000) -> HookResult:
     started = time.monotonic()
-    text = read_transcript(transcript, stdin=stdin)
-    if not text.strip():
-        raise HookError(f"empty transcript: {transcript}")
+    try:
+        text = read_transcript(transcript, stdin=stdin)
+    except ValueError as exc:  # the loader speaks ValueError; the hook speaks HookError
+        raise HookError(str(exc)) from exc
+    chunks = promote_mod.chunk_transcript(text, max_chars)
 
     if dry_run:
-        return HookResult(prompt=promote_mod.build_prompt(text, cfg, _existing(cfg)),
+        # the first chunk is the first request the endpoint would receive
+        return HookResult(prompt=promote_mod.build_prompt(chunks[0] if chunks else text, cfg,
+                                                           _existing(cfg)),
                           seconds=time.monotonic() - started)
-
-    chunks = promote_mod.chunk_transcript(text, max_chars)
     proposals = promote_mod.dedupe_proposals(_reflect_bounded(chunks, cfg, provider, timeout))
     # nothing is written until the model has answered in full: a transport error above leaves the
     # vault exactly as it was, which is what "no partial entry" means
