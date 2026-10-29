@@ -158,35 +158,43 @@ run to A/B a shape:
 
 | variant | rank 1 gold | rank 1 promoted | rank 1 subject | gold in 5 |
 |---|---|---|---|---|
-| **shipped `quipu.index.search`** | **6/10** | 8/10 | 9/10 | 7/10 |
-| copy: AND only, flat columns | 5/10 | 7/10 | 7/10 | 5/10 |
-| copy: thin AND, flat columns | 5/10 | 6/10 | 8/10 | 6/10 |
-| copy: thin AND, shipped column weights | 6/10 | 8/10 | 9/10 | 7/10 |
-| copy: flat + raw×0.5, pruned×0.1 | 6/10 | 9/10 | 9/10 | 6/10 |
-| copy: shipped + raw×0.5, pruned×0.1 | 6/10 | 9/10 | 9/10 | 7/10 |
-| copy: summary-only (10/1/1/0.2) | 6/10 | 9/10 | 10/10 | 7/10 |
+| **shipped, after writing the two missing entries** | **8/10** | 8/10 | 10/10 | 9/10 |
+| shipped, before that curation | 6/10 | 8/10 | 9/10 | 7/10 |
+| copy: AND only, flat columns | 7/10 | 7/10 | 8/10 | 7/10 |
+| copy: thin AND, flat columns | 7/10 | 6/10 | 9/10 | 8/10 |
+| copy: thin AND, shipped column weights | 8/10 | 8/10 | 10/10 | 9/10 |
+| copy: flat + raw×0.5, pruned×0.1 | 8/10 | 9/10 | 10/10 | 8/10 |
+| copy: shipped + raw×0.5, pruned×0.1 | 8/10 | 9/10 | 10/10 | 9/10 |
+| copy: summary-only (10/1/1/0.2) | 8/10 | 9/10 | 10/10 | 9/10 |
+
+Rows 3–8 run against the curated vault (`live-2026-10-29-curated.json`); the two shipped rows are the
+same instrument before and after the curation, which is the cleanest measurement in this file: **+2
+verified answers from two entries, with no code change at all**. The variant rows are measured after
+curation because that is the corpus they will be judged on.
 
 Three things a reader should take from that table.
 
-**6/10, not 9/10.** The earlier table in this file quoted 9/10, and it was measured with the subject
-column. Four of the ten questions are still wrong at rank 1 under the honest metric: a 3900X memory note
-answers a 3960X question, a solana-test-validator capture answers "which GPU should I buy", a launcher-UI
-note answers "how do we deploy a pump.fun token", and a migration plan with no addresses in it answers
-"rig IP addresses". The weights are not the problem — two of those four questions have **no entry in the
-corpus that answers them at all** (`gold_ids` is empty and the row prints `NO VERIFIED ANSWER IN
-CORPUS`). That is a curation gap, and writing two verified entries is cheaper than any scoring change.
+**The first honest reading was 6/10, not 9/10.** The earlier table in this file quoted 9/10, and it was
+measured with the subject column. Under `rank1_gold`, four questions were wrong at rank 1: a 3900X memory
+note answered a 3960X question, a solana-test-validator capture answered "which GPU should I buy", a
+launcher-UI note answered "how do we deploy a pump.fun token", and a migration plan with no addresses in
+it answered "rig IP addresses". Two of the four had **no entry in the corpus that answers them at all**
+(`gold_ids` was empty and the row printed `NO VERIFIED ANSWER IN CORPUS`) — so two verified entries were
+written, and the same ranking then scored **8/10** on the same ten questions. Curation, not weights.
 
-**The copy is faithful, or the row means nothing.** The third row reproduces the shipped row exactly
-(6 gold / 8 promoted / 9 subject / 7 in-five), which is the only reason to believe rows below it. A
-variant that disagrees at the baseline is measuring its own implementation — this file used to carry a
-row labelled "shipped weights" that was `10/6/3/1` while the code shipped `10/4/2/0.5`. The weights are
-now read from `quipu.index.COLUMN_WEIGHTS` and pinned by a test.
+**The copy is faithful, or the row means nothing.** The "copy: thin AND, shipped column weights" row
+reproduces the shipped row exactly (8 gold / 8 promoted / 10 subject / 9 in-five), which is the only reason
+to believe the rows around it. A variant that disagrees at the baseline is measuring its own
+implementation — this file used to carry a row labelled "shipped weights" that was `10/6/3/1` while the
+code shipped `10/4/2/0.5`. The weights are now read from `quipu.index.COLUMN_WEIGHTS` and pinned by a test.
 
-**Sharpening the weights does not buy answers.** The summary-only row lifts the loose column to 10/10
-and buys exactly zero verified answers (6/10 either way). State demotion lifts promoted-at-rank-1 to
-9/10 and also buys zero. Both are the same trap: the metric that moves is the one that is not precision.
-The shipped combination stays chosen on the harness tie-break, not on the live set — ten hand-judged
-questions overfit, and a sharper weight set once scored 10/10 here while losing 0.002 MRR on 100 queries.
+**Sharpening the weights does not buy answers.** The summary-only row lifts the loose column to 10/10 and
+buys exactly zero verified answers over the shipped ranking (8/10 either way). State demotion lifts
+promoted-at-rank-1 to 9/10 and also buys zero. Both are the same trap: the metric that moves is the one
+that is not precision. The shipped combination stays chosen on the harness tie-break, not on the live set —
+ten hand-judged questions overfit, and a sharper weight set once scored 10/10 here while losing 0.002 MRR on
+100 queries. The two misses that remain are `gold_in_5` hits: right note in the list, wrong note first, and
+both need a curated entry or a better ranking, not a multiplier.
 
 `benchmarks/sweep_retrieval.py` is the other instrument: it installs each variant over the shipped
 `search` and prints every one, so a weighting that fails the measurement gets reverted in public
