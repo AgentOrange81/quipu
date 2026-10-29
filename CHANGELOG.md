@@ -8,6 +8,10 @@ truth and a migration is the user's data.
 
 ### Added
 
+- **Time-restricted search** — `quipu search --since/--until` (and the MCP `search` tool's `since`/`until`)
+  filter on `created`. A bare date means a day and `--until` runs *through* it; an explicit instant is
+  exclusive, offsets are normalised to UTC, and a bad value is a usage error naming the value rather than
+  a dropped filter (#52).
 - **`quipu brief`** — the standing answer an agent boots with: promoted entries, one line each, grouped
   by kind, importance-first, deterministic and model-free, written to `.quipu/brief/` (derived, never
   beside the entries). Default 40 entries ≈ 2.5k tokens; `--limit 0` for all of them (#51).

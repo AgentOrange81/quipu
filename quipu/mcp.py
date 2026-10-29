@@ -34,10 +34,14 @@ def _log(msg: str) -> None:
 # --------------------------------------------------------------------------- tool implementations
 
 def _search(cfg, args: dict) -> dict:
-    rows = index_mod.search(
-        cfg.db_path, str(args.get("query") or ""), kind=args.get("kind") or None,
-        state=args.get("state") or None, agent=args.get("agent") or None,
-        project=args.get("project") or None, limit=int(args.get("limit") or 10))
+    try:
+        rows = index_mod.search(
+            cfg.db_path, str(args.get("query") or ""), kind=args.get("kind") or None,
+            state=args.get("state") or None, agent=args.get("agent") or None,
+            project=args.get("project") or None, limit=int(args.get("limit") or 10),
+            since=args.get("since") or None, until=args.get("until") or None)
+    except ValueError as exc:  # a bad window is a caller error, never a silently ignored filter
+        return {"query": args.get("query"), "hits": [], "error": f"since/until: {exc}"}
     if not rows:                      # the CLI exits 1 on "no matches"; here that is a normal result
         return {"query": args.get("query"), "hits": [], "note": "no matches"}
     keys: tuple[str, ...] = ("id", "kind", "state", "agent", "project", "created", "summary", "ask",
@@ -121,6 +125,10 @@ TOOLS: list[dict[str, Any]] = [
                 "state": {"type": "string", "description": "raw|promoted|pruned"},
                 "agent": {"type": "string"},
                 "project": {"type": "string"},
+                "since": {"type": "string",
+                          "description": "only entries created on/after this: 2026-10-01 or an ISO instant"},
+                "until": {"type": "string",
+                          "description": "only entries created through this DAY, or before an exact instant"},
             },
             "required": ["query"],
         },

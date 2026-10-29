@@ -119,6 +119,34 @@ transaction. Edges are never deleted; the closed row keeps its window and `quipu
 it `"live": false`. `quipu audit` reports any superseded entry whose edge is still live, which is
 the shape a vault written by an older quipu is in.
 
+## Restricting a search to a time window
+
+Entries have always carried `created`; search now filters on it, so "what did we decide in October" is
+a query instead of a list you read dates off.
+
+```bash
+quipu --vault ~/vault search "glitch memory" --since 2026-10-01
+quipu --vault ~/vault search "quipu" --until 2026-10-28
+quipu --vault ~/vault search "release" --since 2026-10-01 --until 2026-10-29
+quipu --vault ~/vault search "release" --since 2026-10-01T12:30:00Z
+```
+
+A bare date names a **day**, which is the only sane reading of the flag: `--since 2026-10-01` starts at
+00:00:00Z on the 1st, and `--until 2026-10-29` runs *through* the 29th — including a note written at
+23:59. Give an explicit instant (`2026-10-29T00:00:00Z`) and `--until` becomes exclusive, exactly as
+written. Offsets are normalised to UTC, and an unparseable value is a usage error that names what it got,
+never a filter that quietly disappeared:
+
+```
+$ quipu search quipu --since october
+--since/--until: 'october' is not a date or an ISO instant — use 2026-10-01 or 2026-10-01T12:30:00Z
+```
+
+The window joins `kind`/`state`/`agent`/`project` in the same `WHERE`, so ranking is untouched and
+`--limit` counts survivors. Measured on the live vault: 40 hits for `quipu` with no window (18 on
+2026-10-28, 22 on 2026-10-29); `--until 2026-10-28` returns exactly those 18 and `--since 2026-10-29`
+exactly those 22 — a clean partition, no day dropped either side.
+
 ## The brief: what an agent reads before it knows what to ask
 
 A vault answers a question well. It does not help an agent that has just woken up and has no question

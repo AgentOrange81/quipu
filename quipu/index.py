@@ -1,7 +1,9 @@
 """SQLite index: full-text search over entries plus the temporal graph tables."""
 from __future__ import annotations
 
+import re
 import sqlite3
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from .store import Entry, iter_entries
@@ -159,8 +161,39 @@ def _scan(c: sqlite3.Connection, match: str, where: list[str], params: list, lim
     return [dict(r) for r in c.execute(sql, weights + [match] + params + [limit]).fetchall()]
 
 
+_DAY_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+
+
+def time_bound(value: str, *, upper: bool) -> tuple[str, str]:
+    """Turn a `--since` / `--until` value into (sql operator, ISO instant) over `entries.created`.
+
+    A bare date names a DAY, not an instant — that is the whole point of the flag. `since 2026-10-01`
+    starts at 00:00:00Z; `until 2026-10-29` runs THROUGH the 29th, so it becomes a `< next midnight`
+    bound rather than `<= 00:00`. Getting this backwards silently drops a day, and every entry in a
+    working vault is created in the afternoon.
+    """
+    raw = (value or "").strip()
+    if not raw:
+        raise ValueError("empty time bound")
+    try:
+        if _DAY_RE.match(raw):
+            start = datetime.strptime(raw, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+            if upper:
+                return "<", (start + timedelta(days=1)).strftime("%Y-%m-%dT%H:%M:%SZ")
+            return ">=", start.strftime("%Y-%m-%dT%H:%M:%SZ")
+        parsed = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise ValueError(
+            f"{raw!r} is not a date or an ISO instant — use 2026-10-01 or 2026-10-01T12:30:00Z") from exc
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    instant = parsed.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    return ("<" if upper else ">="), instant
+
+
 def search(db: str | Path, query: str, kind: str | None = None, state: str | None = None,
-           agent: str | None = None, project: str | None = None, limit: int = 10) -> list[dict]:
+           agent: str | None = None, project: str | None = None, limit: int = 10,
+           since: str | None = None, until: str | None = None) -> list[dict]:
     """Rank entries for `query`. AND first, then topped up from the OR ranking (#43).
 
     Every token is ANDed, which is precise and, for a question-shaped query, nearly empty: one word
@@ -182,6 +215,11 @@ def search(db: str | Path, query: str, kind: str | None = None, state: str | Non
         if val:
             where.append(f"e.{col} = ?")
             params.append(val)
+    for value, is_upper in ((since, False), (until, True)):
+        if value:
+            op, instant = time_bound(str(value), upper=is_upper)
+            where.append(f"e.created {op} ?")
+            params.append(instant)
     window = max(limit * CANDIDATE_WINDOW, limit)
     try:
         rows = _scan(c, match, where, params, window)
