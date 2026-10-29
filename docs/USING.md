@@ -318,6 +318,46 @@ with the warning); a 14 KB transcript hit the endpoint's own 120 s read timeout 
 with `reflection failed: TimeoutError: timed out` and no partial entry. Chunking a long transcript is
 #2, not something the hook should guess at.
 
+## A transcript too long for one prompt
+
+A real session does not fit in one prompt, and pretending it does fails quietly or loudly depending on the
+endpoint. Measured against the local 35B on `:8080`: a 3 KB session produced nothing in 104 s, and a 14 KB
+one blew the endpoint's own 120 s read timeout. So `reflect` loads the transcript by **shape** and sends it
+in pieces.
+
+Two shapes are understood:
+
+- **Hermes session JSONL** — one object per line with `role` and `content`, where `content` is a string or a
+  list of `{"type": "text", "text": …}` parts. It is rendered as `role: text` lines. Rows that are not
+  messages, malformed lines and empty messages are skipped: one corrupt line is not a broken session.
+- **Markdown or anything else** — passed through untouched, because a human already chose its shape.
+
+```bash
+quipu --vault ~/vault reflect ~/.hermes/profiles/glitch/sessions/<session>.jsonl --max-chars 4000
+```
+
+`--max-chars` (default 24000) splits on **turn boundaries only** — no message is ever cut in half. One turn
+longer than the cap is kept **whole** as its own chunk rather than truncated, deliberately: silently cutting
+a message is the failure this project exists to stop, so bounding an oversized turn is your decision, not
+the chunker's quiet one. `--max-chars 0` disables chunking. Joining the chunks reproduces the file exactly.
+
+A chunked pass prints one line per chunk and then the total:
+
+```
+chunk 1/4: 2 proposals
+chunk 2/4: 1 proposals
+...
+4 proposals, 3 promoted, 1 left raw
+```
+
+Proposals are de-duplicated by summary across chunks — neighbouring context makes the same claim come back
+twice, and one claim must stay one entry. `quipu hook` uses the same loader and chunker and takes the same
+`--max-chars`; its `--timeout` still bounds the **whole** pass, not each chunk.
+
+Sizing note: the model's read timeout is per request, not per pass, so `--max-chars` has to be sized to the
+endpoint. On this box's local 35B that means roughly 1–3 KB per chunk; a bigger cap buys fewer chunks and
+more timeouts.
+
 ## Exporting
 
 | command | when you want it | what each record carries |
