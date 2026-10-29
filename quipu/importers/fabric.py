@@ -206,11 +206,61 @@ def _split_frontmatter(text: str) -> tuple[dict | None, str]:
     if not m:
         return None, text
     fm: dict = {}
+    pending_key: str | None = None      # a quoted scalar that has not closed yet
+    pending: list[str] = []
     for line in m.group(1).splitlines():
+        if pending_key is not None:
+            pending.append(line.strip())
+            if _closes_quote(" ".join(pending)):
+                fm[pending_key] = _parse_value(" ".join(pending))
+                pending_key, pending = None, []
+            continue
         mm = _KV_RE.match(line)
-        if mm:
-            fm[mm.group(1)] = _parse_value(mm.group(2))
+        if not mm:
+            continue
+        key, raw = mm.group(1), mm.group(2)
+        # A quoted scalar may wrap onto following lines (YAML folding). Fabric writes summaries as
+        # `summary: '... long text ...'` and its writer wraps them, so a line-based reader truncated the
+        # summary at the wrap and kept the opening quote: 88 entries on the live vault, 50 of them
+        # promoted, and the truncated prefix made 20 unrelated entries look near-identical (#54).
+        if raw[:1] in ("'", '"') and not _closes_quote(raw):
+            pending_key, pending = key, [raw]
+            continue
+        fm[key] = _parse_value(raw)
+    if pending_key is not None:         # unterminated: take what we have rather than lose the entry
+        fm[pending_key] = _parse_value(" ".join(pending))
     return fm, text[m.end():]
+
+
+def _closes_quote(raw: str) -> bool:
+    """Does this value's opening quote get closed on the same logical line?
+
+    Only the first character decides the quote style: a summary that merely *contains* an apostrophe
+    ("the agent's box") is not a quoted scalar and must not be treated as an unterminated one.
+    """
+    raw = raw.strip()
+    if not raw or raw[0] not in "\"'":
+        return True
+    quote = raw[0]
+    if quote == '"':
+        try:
+            json.JSONDecoder().raw_decode(raw)
+            return True
+        except ValueError:
+            pass
+    # single-quoted YAML escapes a literal quote by doubling it, so count pairs
+    body, i = raw[1:], 0
+    while i < len(body):
+        if body[i] == quote:
+            if quote == "'" and i + 1 < len(body) and body[i + 1] == "'":
+                i += 2
+                continue
+            return True
+        if quote == '"' and body[i] == "\\":
+            i += 2
+            continue
+        i += 1
+    return False
 
 
 def _parse_value(raw: str):
@@ -220,9 +270,19 @@ def _parse_value(raw: str):
         return ""
     if raw[0] == '"':
         return _parse_quoted(raw)
+    if raw[0] == "'":
+        return _parse_single_quoted(raw)
     if raw[0] == "[":
         return _parse_inline_list(raw)
     return _strip_comment(raw).strip()
+
+
+def _parse_single_quoted(raw: str) -> str:
+    """A YAML single-quoted scalar: the only escape is `''` for a literal apostrophe."""
+    body = raw.strip()
+    if len(body) >= 2 and body.endswith("'"):
+        body = body[:-1]
+    return body[1:].replace("''", "'")
 
 
 def _parse_quoted(raw: str) -> str:
