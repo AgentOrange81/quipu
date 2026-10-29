@@ -6,6 +6,17 @@ truth and a migration is the user's data.
 
 ## Unreleased
 
+### Fixed
+
+- **Fabric import mangled single-quoted, wrapped summaries** (#54). Fabric writes summaries as YAML
+  single-quoted scalars and wraps long ones; the importer was line-based and only understood `"…"` and
+  `[…]`, so those summaries arrived with their opening quote attached *and* truncated at the wrap — 88
+  entries on the live vault, 50 of them promoted, and one 20-entry family of truncated identical prefixes
+  supplied 190 of 206 high-similarity pairs in a semantic sweep. The parser now unquotes single-quoted
+  scalars (including the `''` escape) and folds continuation lines, and `quipu audit` reports any summary
+  that still starts with a quote character, because fixing the parser does not repair an imported vault.
+  Importers are still unblocked by the 280-byte capture limit — a 900-byte historical summary imports.
+
 ### Added
 
 - **Time-restricted search** — `quipu search --since/--until` (and the MCP `search` tool's `since`/`until`)

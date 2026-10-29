@@ -344,6 +344,12 @@ def cmd_audit(args) -> int:
                 problems.append(f"{e.id}: supersedes missing entry {old}")
         if not e.summary:
             problems.append(f"{e.id}: empty summary")
+        if e.summary[:1] in ("'", '"'):
+            # an imported-and-quoted summary (#54): the importer keeps the markdown verbatim, so a
+            # summary written as a YAML quoted scalar arrived with its quotes and often truncated at the
+            # wrap. The parser is fixed, but the existing notes are not repaired by that - the audit is
+            # how the damage stays visible instead of silently ranking 88 entries on a mangled handle.
+            problems.append(f"{e.id}: summary starts with a quote character (re-import or edit)")
     # the graph must live in the markdown (#24): an edge no entry records is data that
     # `rm .quipu/index.db` would take with it.
     c = index_mod.connect(cfg.db_path)

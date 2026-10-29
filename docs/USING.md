@@ -119,6 +119,21 @@ transaction. Edges are never deleted; the closed row keeps its window and `quipu
 it `"live": false`. `quipu audit` reports any superseded entry whose edge is still live, which is
 the shape a vault written by an older quipu is in.
 
+## Importing fabric: quoted and wrapped summaries
+
+Fabric's own writer emits frontmatter values as YAML **single-quoted** scalars and wraps long ones onto a
+continuation line:
+
+```yaml
+summary: 'Corrected metadata for PRL mining fleet details (agent: hermes, project_id:
+  prl-mining)'
+```
+
+The importer folds those back into one value and strips the quotes, so an import yields the same handle
+fabric wrote. If you imported before that fix, `quipu audit` names every entry still carrying
+a leading quote character — the parser fix does not rewrite notes that are already on disk, and the audit
+is how the damage stays visible.
+
 ## Restricting a search to a time window
 
 Entries have always carried `created`; search now filters on it, so "what did we decide in October" is
