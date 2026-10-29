@@ -114,7 +114,9 @@ def _mini_toml(text: str) -> dict:
         if pending is not None:
             pending.append(line)
             if "]" in line:
-                body = " ".join(pending)
+                # the array is closed, so its comments can go: the comments inside it and the one
+                # after the closing `]` are not part of the value
+                body = " ".join(_strip_inline_comment(part) for part in pending)
                 pending = None
                 key, _, value = body.partition("=")
                 # TOML allows a trailing comma before `]`; JSON does not
@@ -128,12 +130,18 @@ def _mini_toml(text: str) -> dict:
             continue
         key, _, value = line.partition("=")
         key, value = key.strip(), value.strip()
-        if value.startswith("[") and not value.endswith("]"):
-            pending = [line]          # multi-line array, as save() emits predicates
-            continue
         if value.startswith("["):
-            section[key] = json.loads(value.replace("'", '"'))
-        elif value.startswith(('"', "'")):
+            # an array is not a scalar: it may close on this line or span several, and the
+            # comment after the closing `]` is not part of the value. So it is only stripped
+            # once the array is closed.
+            closed = _strip_inline_comment(value)
+            if not closed.endswith("]"):
+                pending = [line]          # multi-line array, as save() emits predicates
+                continue
+            section[key] = json.loads(closed.replace("'", '"'))
+            continue
+        value = _strip_inline_comment(value)   # a trailing `# ...` is a comment, not the value
+        if value.startswith(('"', "'")):
             section[key] = value[1:-1]
         elif value in ("true", "false"):
             section[key] = value == "true"
