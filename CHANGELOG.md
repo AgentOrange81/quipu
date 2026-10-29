@@ -53,6 +53,14 @@ truth and a migration is the user's data.
   (`test_out_of_vocabulary_spec_is_skipped_and_reported`) went red on the fix as `XPASS(strict)` and the
   marker came off with it, and a second test covers the unparseable-spec shape.
 
+- **A database from an older schema is rebuilt from the markdown instead of migrated** (#37). Migrating
+  added the `key` column and backfilled it, but the entity rows kept their old display names, so the join
+  found nothing and `timeline` reported an **empty graph** for a vault whose notes held the edges — better
+  than the crash (#23) and worse than the truth. Any db whose `user_version` is behind now gets dropped and
+  rebuilt (entries, graph and entities) on the way into a CLI command or the MCP server, with one line on
+  stderr: `index schema v0 -> v2: rebuilt from markdown (873 entries, 2 edges)`. A current db is left alone,
+  and an unreadable one counts as stale. The index is derived; the markdown is the truth.
+
 - **Fabric import mangled single-quoted, wrapped summaries** (#54). Fabric writes summaries as YAML
   single-quoted scalars and wraps long ones; the importer was line-based and only understood `"…"` and
   `[…]`, so those summaries arrived with their opening quote attached *and* truncated at the wrap — 88

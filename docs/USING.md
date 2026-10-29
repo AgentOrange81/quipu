@@ -363,6 +363,15 @@ An out-of-vocabulary predicate is reported the same way: the entry, the spec, an
 add the predicate to. Fix it in the note's frontmatter, or add the predicate to `.quipu/config.toml`
 and reindex. A vault with twenty skips prints twenty lines, not one line twenty times.
 
+**An index written by an older version.** It is rebuilt from the markdown, not migrated — the index is
+derived, and migrating it once left entity rows whose old display names no longer resolved, so `timeline`
+reported an empty graph for a vault whose notes held the edges. You see one line on stderr and nothing in
+`notes/` is touched:
+
+```
+index schema v0 -> v2: rebuilt from markdown (873 entries, 2 edges)
+```
+
 ## See also
 
 [DESIGN.md](DESIGN.md) — the layers, the gate, why `ask` is required.
