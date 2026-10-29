@@ -15,6 +15,9 @@ from . import DEFAULT_PREDICATES
 #: evidence. The importer applies the same gate, so an imported vault tells the truth (#26).
 DEFAULT_PROMOTE_THRESHOLD = 0.5
 
+#: The endpoint read timeout, in seconds, when the config says nothing about it.
+DEFAULT_LLM_TIMEOUT = 120
+
 
 @dataclass
 class Config:
@@ -25,6 +28,9 @@ class Config:
     llm_base_url: str = "http://127.0.0.1:8080/v1"
     llm_model: str = "local"
     llm_api_key: str = ""
+    #: How long a single endpoint request may take before it is called a failure (#68). 120 s is
+    #: smaller than one chunk of a real transcript on a slow local model, so it has to be raisable.
+    llm_timeout: int = DEFAULT_LLM_TIMEOUT
     #: Optional semantic retrieval (#5). Empty `embed_url` means lexical-only, which is the default:
     #: a vault works with no endpoint, and `search --hybrid` says so instead of failing.
     embed_url: str = ""
@@ -70,11 +76,25 @@ class Config:
             f'base_url = "{self.llm_base_url}"\n'
             f'model = "{self.llm_model}"\n'
             'api_key = ""\n'
+            f"timeout = {self.llm_timeout}\n"
             "\n[embed]\n"
             f'url = "{self.embed_url}"\n'
             f'model = "{self.embed_model}"\n',
             encoding="utf-8",
         )
+
+
+def validate_llm_timeout(value) -> int:
+    """The endpoint read timeout in seconds: a positive whole number, or a loud refusal.
+
+    The message names `llm.timeout` because that is the key the same value lives under in
+    `config.toml` — one setting, one name, whatever route it came in by.
+    """
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise ValueError(f"llm.timeout must be a whole number of seconds, got {value!r}")
+    if value <= 0:
+        raise ValueError(f"llm.timeout must be greater than zero, got {value!r}")
+    return value
 
 
 def _mini_toml(text: str) -> dict:
@@ -131,12 +151,62 @@ def _mini_toml(text: str) -> dict:
     return out
 
 
+def _raw_llm_timeout(text: str) -> str | None:
+    """The raw `timeout = ...` value inside the `[llm]` section, if the file has one."""
+    section = None
+    for raw in text.splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#"):
+            continue
+        if line.startswith("[") and line.endswith("]"):
+            section = line[1:-1].strip()
+            continue
+        if section != "llm":
+            continue
+        key, _, value = line.partition("=")
+        if key.strip() == "timeout":
+            return _strip_inline_comment(value.strip())
+    return None
+
+
+def _strip_inline_comment(value: str) -> str:
+    """Drop a trailing `# ...` comment, unless the `#` sits inside a quoted string."""
+    quote = ""
+    for i, ch in enumerate(value):
+        if quote:
+            if ch == quote:
+                quote = ""
+        elif ch in "\"'":
+            quote = ch
+        elif ch == "#":
+            return value[:i].strip()
+    return value
+
+
+def _refuse_bad_llm_timeout(raw: str) -> None:
+    """Refuse a `timeout` that is not a whole number of seconds — in our words.
+
+    The TOML parser would say "invalid value at line 2" and leave the operator guessing which key
+    is wrong. The key is named here, before the file is parsed.
+    """
+    value = raw.strip()
+    try:
+        seconds = int(value)
+    except ValueError:
+        raise ValueError(f"llm.timeout must be a whole number of seconds, got {value!r}") from None
+    if seconds <= 0:
+        raise ValueError(f"llm.timeout must be greater than zero, got {seconds!r}")
+
+
 def load(root: str | Path, create: bool = False) -> Config:
     root = Path(root).expanduser().resolve()
     cfg = Config(root=root)
     path = cfg.config_path
     if path.exists():
         text = path.read_text(encoding="utf-8")
+        raw_timeout = _raw_llm_timeout(text)
+        if raw_timeout is not None:
+            _refuse_bad_llm_timeout(raw_timeout)
         data = tomllib.loads(text) if tomllib else _mini_toml(text)
         q = data.get("quipu", {})
         cfg.predicates = tuple(q.get("predicates", DEFAULT_PREDICATES))
@@ -146,6 +216,8 @@ def load(root: str | Path, create: bool = False) -> Config:
         cfg.llm_base_url = llm.get("base_url", cfg.llm_base_url)
         cfg.llm_model = llm.get("model", cfg.llm_model)
         cfg.llm_api_key = llm.get("api_key", cfg.llm_api_key)
+        # a config with no `timeout` key keeps the default; a config with a bad one is refused
+        cfg.llm_timeout = validate_llm_timeout(llm.get("timeout", cfg.llm_timeout))
         embed = data.get("embed", {})
         cfg.embed_url = embed.get("url", cfg.embed_url) or ""
         cfg.embed_model = embed.get("model", cfg.embed_model)

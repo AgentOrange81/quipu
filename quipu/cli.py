@@ -55,10 +55,31 @@ def _cfg(args):
     return cfg
 
 
+class _EndpointTimeoutAction(argparse.Action):
+    """`--endpoint-timeout`: a positive whole number of seconds, refused loudly.
+
+    argparse's own `type=int` turns a bad value into a usage error that names neither the setting
+    nor the rule, and it swallows the exception it is handed. This action raises the ValueError
+    the setting deserves — its message names `llm.timeout`, the key the same value lives under in
+    `config.toml` — and `main` turns that into a clean exit instead of a traceback.
+    """
+
+    def __call__(self, parser, namespace, values, option_string=None):
+        try:
+            seconds = int(str(values))
+        except (TypeError, ValueError):
+            raise ValueError(f"llm.timeout must be a whole number of seconds, got {values!r}") from None
+        if seconds <= 0:
+            raise ValueError(f"llm.timeout must be greater than zero, got {seconds!r}")
+        setattr(namespace, self.dest, seconds)
+
+
 def _provider(args, cfg):
     if args.fake:
         return promote_mod.FakeProvider(json.loads(Path(args.fake).read_text()))
-    return promote_mod.HttpProvider(cfg.llm_base_url, args.model or cfg.llm_model, cfg.llm_api_key)
+    timeout = getattr(args, "endpoint_timeout", None) or cfg.llm_timeout
+    return promote_mod.HttpProvider(cfg.llm_base_url, args.model or cfg.llm_model, cfg.llm_api_key,
+                                    timeout=timeout)
 
 
 def cmd_init(args) -> int:
@@ -631,6 +652,8 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--max-chars", type=int, default=24000,
                    help="split the transcript on turn boundaries at about this size "
                         "(0 disables chunking; a single longer turn is still kept whole)")
+    s.add_argument("--endpoint-timeout", action=_EndpointTimeoutAction, default=None,
+                   help="override the [llm] timeout (seconds) for this request")
     s.add_argument("--dry-run", action="store_true")
 
     s = add("hook", "session-end adapter: reflect a transcript, fail loudly", cmd_hook)
@@ -646,6 +669,9 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--max-chars", type=int, default=24000,
                    help="split the transcript on turn boundaries at about this size "
                         "(0 disables chunking; a single longer turn is still kept whole)")
+    s.add_argument("--endpoint-timeout", action=_EndpointTimeoutAction, default=None,
+                   help="override the [llm] timeout (seconds) for each request — "
+                        "--timeout is the budget for the whole pass")
     s.add_argument("--dry-run", action="store_true",
                    help="print the prompt and write nothing (also QUIPU_HOOK_DRY_RUN=1)")
 
@@ -735,7 +761,11 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
-    args = build_parser().parse_args(argv)
+    try:
+        args = build_parser().parse_args(argv)
+    except ValueError as exc:  # a flag value the setting cannot use: name the setting, exit 2
+        print(str(exc), file=sys.stderr)
+        return 2
     return args.fn(args)
 
 
