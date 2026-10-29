@@ -60,31 +60,42 @@ def cmd_write(args) -> int:
     cfg = _cfg(args)
     body = _read_stdin().strip() if args.body else args.body
     specs = []
+    order = []
+    broken = 0
     for spec in args.edge or []:
         try:
             src, predicate, dst = parse_edge_spec(spec)
         except ValueError:
+            # a malformed spec is a broken claim, not a reason to lose the memory: the entry is
+            # written, the claim is skipped, and the reindex reports it.
             print(f"--edge wants src:predicate:dst, got {spec!r}", file=sys.stderr)
-            return 2
-        try:
-            # checked BEFORE the entry is written: an entry must never record an edge the graph
-            # refused to take
-            graph_mod.check_predicate(cfg, predicate, args.allow_new)
-        except ValueError as exc:
-            print(str(exc), file=sys.stderr)
-            return 2
+            broken += 1
+            order.append(spec)
+            continue
         specs.append((spec, src, predicate, dst))
+        order.append(spec)
     e = Entry(kind=args.kind, state=args.state, agent=args.agent, project=args.project,
               session=args.session, summary=args.summary, evidence=args.evidence or "",
               ask=args.ask or "", importance=args.importance, body=body, source="cli",
-              supersedes=list(args.supersedes or []),
-              edges=[s for s, _src, _pred, _dst in specs])
+              supersedes=list(args.supersedes or []), edges=order)
+    # The entry is written BEFORE the edges are asserted (docs/USING.md): a bad predicate must
+    # not cost the memory. The write then fails and the entry is left on disk but unindexed;
+    # `quipu reindex` puts it back, skipping the broken claim and saying so.
     p = write_entry(cfg.root, e)
+    failed = 0
     for _spec, src, predicate, dst in specs:
         # the entry's `created` is the window's start, so a rebuild from the markdown reproduces
         # the same window instead of stamping it `now`
-        graph_mod.add_edge(cfg, src, predicate, dst, note_id=e.id, at=e.created,
-                           allow_new_predicate=args.allow_new)
+        try:
+            graph_mod.add_edge(cfg, src, predicate, dst, note_id=e.id, at=e.created,
+                               allow_new_predicate=args.allow_new)
+        except ValueError as exc:
+            print(str(exc), file=sys.stderr)
+            failed += 1
+    if failed or broken:
+        # the write failed: the index is not refreshed, so the entry stays unindexed until a
+        # reindex runs. The markdown is the truth; the index is disposable.
+        return 2
     index_mod.reindex(cfg.root, cfg.db_path)
     graph_mod.materialize(cfg)
     print(p)
@@ -250,7 +261,13 @@ def cmd_reindex(args) -> int:
     n = index_mod.reindex(cfg.root, cfg.db_path)
     report = graph_mod.rebuild(cfg)
     graph_mod.materialize(cfg)
-    print(f"indexed {n} entries, rebuilt {report['edges']} edges ({report['closed']} closed)")
+    summary = f"indexed {n} entries, rebuilt {report['edges']} edges ({report['closed']} closed)"
+    skipped = report.get("skipped") or []
+    if skipped:
+        # a broken edge spec is reported, not fatal: the entry is indexed and the memory is kept
+        reasons = "; ".join(dict.fromkeys(skipped))
+        summary += f", {len(skipped)} edge{'' if len(skipped) == 1 else 's'} skipped: {reasons}"
+    print(summary)
     if report["folded"]:
         print(f"folded {report['folded']} db-only edges into the markdown")
     if report["orphans"]:

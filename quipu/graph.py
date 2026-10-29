@@ -192,7 +192,7 @@ def entry_records_edge(entry: Entry, spec: str) -> bool:
     return False
 
 
-def check_predicate(cfg: Config, predicate: str, allow_new_predicate: bool = False) -> None:
+def _check_predicate(cfg: Config, predicate: str, allow_new_predicate: bool = False) -> None:
     """A predicate outside the closed vocabulary is a hard error — unless it is let through."""
     if predicate not in cfg.predicates and not allow_new_predicate:
         raise ValueError(
@@ -261,7 +261,7 @@ def add_edge(cfg: Config, src: str, predicate: str, dst: str, note_id: str = "",
     The spec is written into the entry that asserted it, so the graph survives the loss of the db
     (#24). `record=False` is for the rebuild, which replays what the markdown already says.
     """
-    check_predicate(cfg, predicate, allow_new_predicate)
+    _check_predicate(cfg, predicate, allow_new_predicate)
     at = at or _entry_created(cfg, note_id) or now_iso()
     c = connect(cfg.db_path)
     try:
@@ -286,7 +286,7 @@ def contradict(cfg: Config, old_edge_id: int, src: str, predicate: str, dst: str
     names nothing) must leave the old belief live. Closing first and validating after left the
     graph with a closed belief and no live edge at all.
     """
-    check_predicate(cfg, predicate)
+    _check_predicate(cfg, predicate)
     if not (dst or "").strip():
         raise ValueError("contradict needs a destination to believe in")
     at = at or now_iso()
@@ -517,12 +517,20 @@ def rebuild(cfg: Config) -> dict:
     # asserted in the order the windows open, so the edge ids come out the same as they did. A
     # replacement always follows the edge it replaced: they can share a second, and the original
     # order was old-then-new.
+    #
+    # A malformed or out-of-vocabulary spec is a broken claim, not a reason to lose the memory:
+    # the edge is skipped and counted, the entry is indexed either way.
+    skipped: list[str] = []
     plan = []
     for e in sorted(entries.values(), key=lambda e: (e.created, e.id)):
         for spec in e.edges:
             try:
                 src, predicate, dst = parse_edge_spec(spec)
             except ValueError:
+                skipped.append(f"{spec!r} is not a src:predicate:dst spec")
+                continue
+            if predicate not in cfg.predicates:
+                skipped.append(f"{predicate} is not in the vocabulary")
                 continue
             key = (predicate, display_name(src), display_name(dst))
             at = replacement_start.get(key) or e.created
@@ -533,7 +541,7 @@ def rebuild(cfg: Config) -> dict:
     for at, _is_replacement, _created, _eid, src, predicate, dst, note_id in plan:
         try:
             add_edge(cfg, src, predicate, dst, note_id=note_id, at=at,
-                     allow_new_predicate=True, record=False)
+                     allow_new_predicate=False, record=False)
             asserted += 1
         except ValueError:
             continue
@@ -543,4 +551,5 @@ def rebuild(cfg: Config) -> dict:
         for closure in e.edge_closures:
             if _close_spec(cfg, closure.get("spec", ""), closure.get("at", "")):
                 closed += 1
-    return {"edges": asserted, "closed": closed, "folded": folded, "orphans": orphans}
+    return {"edges": asserted, "closed": closed, "folded": folded, "orphans": orphans,
+            "skipped": skipped}
