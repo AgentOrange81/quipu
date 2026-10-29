@@ -22,11 +22,12 @@ quipu --vault ~/memory export dpo --out data/dpo.jsonl     # preference pairs
 `--vault` is a global flag: it goes **before** the subcommand. It defaults to the working
 directory, so inside a vault you can leave it out entirely.
 
-`quipu reflect` is the other way in, and it is the only one that needs a model: it posts the
-transcript to the OpenAI-compatible endpoint in `.quipu/config.toml` (`[llm] base_url`, default
+`quipu reflect <transcript>` is the other way in, and it is the only one that needs a model: it posts
+the transcript to the OpenAI-compatible endpoint in `.quipu/config.toml` (`[llm] base_url`, default
 `http://127.0.0.1:8080/v1`). With no endpoint reachable it fails loudly with
 `RuntimeError: LLM request failed: <urlopen error [Errno 111] Connection refused>`; use
-`quipu reflect --fake <file.json>` to supply the proposals yourself and skip the network entirely.
+`quipu reflect <transcript> --fake <file.json>` to supply the proposals yourself and skip the
+network entirely.
 
 No model or network is needed to see the whole lifecycle — capture, reflect, promote, correct,
 export:
@@ -36,7 +37,8 @@ bash examples/demo.sh
 ```
 
 That script builds a throwaway vault, runs a reflection pass against a canned response
-(`quipu reflect --fake`), writes a correction with `--supersedes`, and exports both datasets.
+(`quipu reflect <transcript> --fake <file.json>`), writes a correction with `--supersedes`, and
+exports both datasets.
 **After the quickstart, read [docs/USING.md](docs/USING.md)** — it is the day-to-day guide: the
 recall-first habit, what makes an entry worth promoting, how to correct one, and what to do when
 something goes wrong.
