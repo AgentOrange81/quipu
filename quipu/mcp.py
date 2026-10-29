@@ -237,6 +237,9 @@ def handle(cfg, msg: dict) -> dict | None:
 
 def serve(vault: str | Path) -> int:
     cfg = config_mod.load(vault, create=False)
+    note = index_mod.refresh_if_stale(cfg)
+    if note:
+        _log(note)
     _log(f"serving {cfg.root} (quipu {__version__}, protocol {PROTOCOL_VERSION})")
     for line in sys.stdin:
         line = line.strip()

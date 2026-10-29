@@ -68,6 +68,41 @@ def _migrate(c: sqlite3.Connection) -> None:
         c.execute("UPDATE entities SET key = ? WHERE id = ?", (identity(row["name"]), row["id"]))
 
 
+def refresh_if_stale(cfg) -> str | None:
+    """A db written by an older schema is DERIVED: rebuild it from the markdown, never migrate it.
+
+    Migration leaves rows whose display names no longer resolve (#37): `_migrate` backfills `key` while
+    the entity keeps its old `name` spelling, so `resolve()` returns the canonical form and the join
+    finds nothing — an old vault opens without crashing and silently reports an empty graph, which is
+    better than the crash it used to be and worse than the truth. Rebuilding deletes that class of bug
+    instead of fixing one instance; the price is a few milliseconds on a vault whose index was already
+    wrong.
+
+    Returns a one-line description of what happened, or None when the db is current (or absent).
+    """
+    db = Path(cfg.db_path)
+    if not db.exists():
+        return None
+    try:
+        probe = sqlite3.connect(db)
+        try:
+            version = probe.execute("PRAGMA user_version").fetchone()[0]
+        finally:
+            probe.close()
+    except sqlite3.DatabaseError:
+        version = 0  # unreadable is worse than old: rebuild it too
+    if version >= SCHEMA_VERSION:
+        return None
+    for suffix in ("", "-wal", "-shm"):
+        Path(str(db) + suffix).unlink(missing_ok=True)
+    n = reindex(cfg.root, db)
+    from . import graph as graph_mod  # local import: graph imports index, so a top-level one cycles
+    report = graph_mod.rebuild(cfg)
+    graph_mod.materialize(cfg)
+    return (f"index schema v{version} -> v{SCHEMA_VERSION}: rebuilt from markdown "
+            f"({n} entries, {report['edges']} edges)")
+
+
 def connect(db: str | Path) -> sqlite3.Connection:
     db = Path(db)
     db.parent.mkdir(parents=True, exist_ok=True)

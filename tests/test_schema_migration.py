@@ -1,10 +1,5 @@
-"""The schema migration (#23) and the graph-in-the-markdown round trip (#24).
-
-These tests live under quipu/ because this task owns quipu/** only; the shipped suite in tests/
-is untouched. Run them with:
-
-    .venv/bin/python -m pytest quipu/tests -q
-"""
+"""The schema migration (#23) and the graph-in-the-markdown round trip (#24), plus the stale-index
+rebuild (#37). Run them with the rest of the suite: `pytest`."""
 import sqlite3
 
 from quipu import graph as graph_mod
@@ -69,6 +64,38 @@ def test_connect_records_the_schema_version(tmp_path):
     conn = index_mod.connect(old)
     assert conn.execute("PRAGMA user_version").fetchone()[0] == index_mod.SCHEMA_VERSION
     conn.close()
+
+
+def test_a_db_from_an_older_schema_is_rebuilt_from_the_markdown_not_migrated(tmp_path):
+    """#37: after migration the rows keep their old display names, so `timeline` reported an EMPTY
+    graph for a vault whose markdown holds the edge. A pre-current `user_version` is a derived index,
+    not history: rebuild it and the class of bug goes away instead of one instance of it."""
+    cfg = load(tmp_path / "vault", create=True)
+    e = Entry(kind="fact", state="promoted", summary="TRX40 is measured as DOCP 3600",
+              evidence="bench", edges=["TRX40:measured_as:DOCP 3600"],
+              created="2026-01-01T00:00:00Z")
+    write_entry(cfg.root, e)
+
+    # an index from before the identity key: no `key`, no user_version, rows that no longer resolve
+    db = cfg.db_path
+    db.parent.mkdir(parents=True, exist_ok=True)
+    c = sqlite3.connect(db)
+    c.executescript(OLD_SCHEMA)
+    c.execute("INSERT INTO entities(name, kind, aliases, created) VALUES(?,?,?,?)",
+              ("TRX40", "thing", "[]", "2026-01-01T00:00:00Z"))
+    c.execute("INSERT INTO edges(src, predicate, dst, note_id, valid_from) VALUES(?,?,?,?,?)",
+              ("trx40", "measured_as", "docp 3600", e.id, "2026-01-01T00:00:00Z"))
+    c.commit()
+    c.close()
+
+    note = index_mod.refresh_if_stale(cfg)
+    assert note and "rebuilt from markdown" in note, note
+    rows = graph_mod.timeline(cfg, "TRX40")
+    assert len(rows) == 1, f"the rebuild must find the edge the migration could not resolve: {rows}"
+    assert rows[0]["predicate"] == "measured_as"
+
+    # a current db is left alone: this is a recovery path, not a rebuild on every command
+    assert index_mod.refresh_if_stale(cfg) is None
 
 
 def test_the_graph_survives_the_loss_of_the_db(tmp_path):

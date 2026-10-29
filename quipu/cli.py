@@ -45,7 +45,13 @@ def _read_stdin() -> str:
 
 
 def _cfg(args):
-    return config_mod.load(args.vault, create=False)
+    cfg = config_mod.load(args.vault, create=False)
+    # a db from an older schema is derived, not sacred: rebuild from the markdown rather than migrate
+    # rows whose display names no longer resolve (#37)
+    note = index_mod.refresh_if_stale(cfg)
+    if note:
+        print(note, file=sys.stderr)
+    return cfg
 
 
 def _provider(args, cfg):
