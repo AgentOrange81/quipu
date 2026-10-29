@@ -8,6 +8,7 @@ from pathlib import Path
 
 from . import __version__
 from . import config as config_mod
+from . import embed as embed_mod
 from . import export as export_mod
 from . import graph as graph_mod
 from . import index as index_mod
@@ -173,8 +174,17 @@ def _import_summary(result, src, vault, dry_run) -> dict:
 
 def cmd_search(args) -> int:
     cfg = _cfg(args)
-    rows = index_mod.search(cfg.db_path, args.query, kind=args.kind, state=args.state,
-                            agent=args.agent, project=args.project, limit=args.limit)
+    note = ""
+    if getattr(args, "hybrid", False):
+        rows, note = embed_mod.hybrid_search(
+            cfg.db_path, args.query, args.embed_url or cfg.embed_url,
+            args.embed_model or cfg.embed_model, limit=args.limit, kind=args.kind,
+            state=args.state, agent=args.agent, project=args.project)
+        if note:
+            print(note, file=sys.stderr)
+    else:
+        rows = index_mod.search(cfg.db_path, args.query, kind=args.kind, state=args.state,
+                                agent=args.agent, project=args.project, limit=args.limit)
     if args.json:
         print(json.dumps(rows, indent=2, ensure_ascii=False))
         return 0 if rows else 1
@@ -342,6 +352,40 @@ def cmd_audit(args) -> int:
     return 0 if not problems else 1
 
 
+def cmd_embed(args) -> int:
+    """Build or refresh the vector index for this vault (#5). Derived data: re-run after a reindex."""
+    cfg = _cfg(args)
+    url = args.embed_url or cfg.embed_url
+    if not url:
+        print("no embedding endpoint: pass --url or set [embed] url in .quipu/config.toml",
+              file=sys.stderr)
+        return 2
+    model = args.embed_model or cfg.embed_model
+    entries = [e for _p, e in iter_entries(cfg.root)]
+    wanted = {}
+    for e in entries:
+        text = embed_mod.entry_text(e.summary, e.ask, e.body)
+        if text:
+            wanted[e.id] = (embed_mod.text_digest(text), text)
+    c = index_mod.connect(cfg.db_path)
+    try:
+        have = {} if args.force else embed_mod.stored_digests(c, model)
+        todo = {eid: text for eid, (digest, text) in wanted.items() if have.get(eid) != digest}
+        vectors: dict[str, tuple[str, list[float]]] = {}
+        ids = list(todo)
+        for start in range(0, len(ids), 64):
+            chunk = ids[start:start + 64]
+            got = embed_mod.embed_texts(url, model, [todo[i] for i in chunk], batch=args.batch)
+            for eid, vec in zip(chunk, got, strict=False):
+                vectors[eid] = (wanted[eid][0], vec)
+        written = embed_mod.store(c, model, vectors) if vectors else 0
+    finally:
+        c.close()
+    print(f"{written} embedded, {len(wanted) - written} unchanged, {len(entries)} entries, "
+          f"model {model}")
+    return 0
+
+
 def cmd_mcp(args) -> int:
     """Serve the vault over MCP on stdio — tools instead of a subprocess per query."""
     from .mcp import serve
@@ -412,6 +456,16 @@ def build_parser() -> argparse.ArgumentParser:
         s.add_argument(f"--{flag}")
     s.add_argument("--limit", type=int, default=10)
     s.add_argument("--json", action="store_true")
+    s.add_argument("--hybrid", action="store_true",
+                   help="fuse the lexical ranking with stored embeddings (#5)")
+    s.add_argument("--embed-url", default="", help="override [embed] url")
+    s.add_argument("--embed-model", default="", help="override [embed] model")
+
+    s = add("embed", "build or refresh the vector index (needs an embeddings endpoint)", cmd_embed)
+    s.add_argument("--url", dest="embed_url", default="", help="OpenAI-compatible /v1/embeddings")
+    s.add_argument("--model", dest="embed_model", default="", help="model name the endpoint expects")
+    s.add_argument("--batch", type=int, default=32)
+    s.add_argument("--force", action="store_true", help="re-embed unchanged entries too")
 
     s = add("show", "print an entry", cmd_show)
     s.add_argument("id")

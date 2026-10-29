@@ -25,6 +25,10 @@ class Config:
     llm_base_url: str = "http://127.0.0.1:8080/v1"
     llm_model: str = "local"
     llm_api_key: str = ""
+    #: Optional semantic retrieval (#5). Empty `embed_url` means lexical-only, which is the default:
+    #: a vault works with no endpoint, and `search --hybrid` says so instead of failing.
+    embed_url: str = ""
+    embed_model: str = "nomic-embed"
     extras: dict = field(default_factory=dict)
 
     @property
@@ -65,7 +69,10 @@ class Config:
             "\n[llm]\n"
             f'base_url = "{self.llm_base_url}"\n'
             f'model = "{self.llm_model}"\n'
-            'api_key = ""\n',
+            'api_key = ""\n'
+            "\n[embed]\n"
+            f'url = "{self.embed_url}"\n'
+            f'model = "{self.embed_model}"\n',
             encoding="utf-8",
         )
 
@@ -139,5 +146,8 @@ def load(root: str | Path, create: bool = False) -> Config:
         cfg.llm_base_url = llm.get("base_url", cfg.llm_base_url)
         cfg.llm_model = llm.get("model", cfg.llm_model)
         cfg.llm_api_key = llm.get("api_key", cfg.llm_api_key)
+        embed = data.get("embed", {})
+        cfg.embed_url = embed.get("url", cfg.embed_url) or ""
+        cfg.embed_model = embed.get("model", cfg.embed_model)
         cfg.extras = data
     return cfg.ensure() if create else cfg
