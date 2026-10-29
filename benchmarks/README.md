@@ -165,6 +165,45 @@ capture. Junk summaries belong to #30, not to a multiplier on state.
 `search` and prints every one, so a weighting that fails the measurement gets reverted in public
 rather than quietly kept.
 
+### Rejected: duplicate consolidation (#55)
+
+Consolidation — folding near-duplicate entries into one evidence-backed belief — was measured before
+building. Two independent signals, same vault (294 promoted entries):
+
+Exact duplicate summaries: **0**.
+
+Token-Jaccard clustering, same project:
+
+| threshold | clusters | entries covered |
+|---|---|---|
+| 0.55 | 3 | 7 |
+| 0.65 | 1 | 2 |
+| 0.75 | 1 | 2 |
+| 0.85 | 0 | 0 |
+
+Semantic sweep over the stored embeddings (cosine ≥ 0.86): **206 pairs**, 82 of them with differing
+numbers on both sides (contradiction candidates) and 124 restatements — but the prefixes dominating the
+pair count give the game away:
+
+```
+ 380  "'corrected metadata for"     <- one family, 20 entries, one TRUNCATED IDENTICAL PREFIX
+   3  "'fabric curation phases"
+   2  "'launchpad v2 decision:"
+```
+
+190 of the 206 pairs come from that single boilerplate family, which was an importer defect (#54), not
+a duplication of belief. A consolidator would have spent its first pass merging truncated prefixes and
+called it progress.
+
+**Verdict: not built.** Three clusters at the loosest useful threshold is 2% of the corpus, and the
+similarity signal on this vault is dominated by damage that needed deleting, not merging. Reproduce with
+`benchmarks/consolidation_probe.py <vault>`; the embeddings must exist (`quipu embed`, see the section
+above).
+
+What the corpus needs instead is the opposite of merging: 17 of 863 entries carried an `ask` when this
+was measured — the field that makes an entry trainable (#27) — and 20 promoted entries carried no claim
+at all (#54).
+
 ### Semantic retrieval, fused with bm25 (#5)
 
 `results/synthetic-hybrid-2026-10-29.json`, produced by `benchmarks/sweep_hybrid.py` against a local
