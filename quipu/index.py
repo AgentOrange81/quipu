@@ -107,12 +107,26 @@ def reindex(root: str | Path, db: str | Path) -> int:
     return len(rows)
 
 
+def _tokens(q: str) -> list[str]:
+    return [t for t in "".join(ch if ch.isalnum() else " " for ch in q).split() if t]
+
+
 def _fts_query(q: str) -> str:
-    toks = [t for t in "".join(ch if ch.isalnum() else " " for ch in q).split() if t]
+    toks = _tokens(q)
     if not toks:
         return ""
     # the * must be outside the quotes: '"markdo*"' is a literal phrase, '"markdo"*' is a prefix
     return " AND ".join([f'"{t}"' for t in toks[:-1]] + [f'"{toks[-1]}"*'])
+
+
+def _fts_query_or(q: str) -> str:
+    """The same terms, ORed. BM25 ranks what comes back, so a query that shares words with a
+    note still finds that note - the fallback for a question-shaped query, where one word
+    ("why", "did", "fail") is in no note at all (#25)."""
+    toks = _tokens(q)
+    if not toks:
+        return ""
+    return " OR ".join([f'"{t}"' for t in toks[:-1]] + [f'"{toks[-1]}"*'])
 
 
 def search(db: str | Path, query: str, kind: str | None = None, state: str | None = None,
@@ -120,6 +134,7 @@ def search(db: str | Path, query: str, kind: str | None = None, state: str | Non
     c = connect(db)
     match = _fts_query(query)
     if not match:
+        c.close()
         return []
     where = ["entries_fts MATCH ?"]
     params: list = [match]
@@ -127,11 +142,17 @@ def search(db: str | Path, query: str, kind: str | None = None, state: str | Non
         if val:
             where.append(f"e.{col} = ?")
             params.append(val)
-    params.append(limit)
     sql = ("SELECT e.*, snippet(entries_fts, 0, '<<', '>>', '…', 14) AS snip, bm25(entries_fts) AS score "
            "FROM entries_fts JOIN entries e ON e.rowid = entries_fts.rowid "
            "WHERE " + " AND ".join(where) + " ORDER BY rank LIMIT ?")
-    out = [dict(r) for r in c.execute(sql, params).fetchall()]
+    out = [dict(r) for r in c.execute(sql, params + [limit]).fetchall()]
+    if not out:
+        # ANDing every token meant one word absent from every note emptied the result set, so a
+        # question-shaped query - the shape an agent actually uses - scored 0.00. Fall back to
+        # the same terms ORed and let BM25 rank them (#25).
+        loose = _fts_query_or(query)
+        if loose:
+            out = [dict(r) for r in c.execute(sql, [loose] + params[1:] + [limit]).fetchall()]
     c.close()
     return out
 

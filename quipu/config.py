@@ -11,12 +11,16 @@ except ModuleNotFoundError:  # Python 3.10: keep the stdlib-only promise, parse 
 
 from . import DEFAULT_PREDICATES
 
+#: The promotion gate: an entry is promoted only when its importance clears this AND it carries
+#: evidence. The importer applies the same gate, so an imported vault tells the truth (#26).
+DEFAULT_PROMOTE_THRESHOLD = 0.5
+
 
 @dataclass
 class Config:
     root: Path
     predicates: tuple[str, ...] = DEFAULT_PREDICATES
-    promote_threshold: float = 0.5
+    promote_threshold: float = DEFAULT_PROMOTE_THRESHOLD
     max_promoted_tokens: int = 4000
     llm_base_url: str = "http://127.0.0.1:8080/v1"
     llm_model: str = "local"
