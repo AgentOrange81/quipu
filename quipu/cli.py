@@ -312,12 +312,15 @@ def cmd_reindex(args) -> int:
     report = graph_mod.rebuild(cfg)
     graph_mod.materialize(cfg)
     summary = f"indexed {n} entries, rebuilt {report['edges']} edges ({report['closed']} closed)"
-    skipped = report.get("skipped") or []
+    skipped = list(dict.fromkeys(report.get("skipped") or []))
     if skipped:
-        # a broken edge spec is reported, not fatal: the entry is indexed and the memory is kept
-        reasons = "; ".join(dict.fromkeys(skipped))
-        summary += f", {len(skipped)} edge{'' if len(skipped) == 1 else 's'} skipped: {reasons}"
+        # a broken edge spec is reported, not fatal: the entry is indexed and the memory is kept.
+        # Counted in the summary line, then one line per skip that names the ENTRY and the SPEC —
+        # a bare predicate name leaves the operator with nowhere to go, and the markdown is the truth.
+        summary += f", {len(skipped)} edge{'' if len(skipped) == 1 else 's'} skipped"
     print(summary)
+    for reason in skipped:
+        print(f"  skipped: {reason}")
     if report["folded"]:
         print(f"folded {report['folded']} db-only edges into the markdown")
     if report["orphans"]:

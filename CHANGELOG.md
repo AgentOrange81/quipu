@@ -44,6 +44,15 @@ truth and a migration is the user's data.
   in the list, wrong note first. Curation moved the number; no weight, no ranking change, and the summary
   column went 9/10 -> 10/10 only as a side effect.
 
+- **`reindex` names the entry and the spec for every skipped edge, one line each** (#46). The summary used
+  to carry `1 edge skipped: served_by is not in the vocabulary` — the predicate and nothing else, so a vault
+  with twenty skips printed one repeated sentence and even a single skip left no file to open. It now prints
+  `1 edge skipped` and then `skipped: e1da99d9: 'quipu-vault:served_by:quipu-mcp' (predicate 'served_by' is
+  not in the vocabulary; add it to <vault>/.quipu/config.toml)`. The entry is still indexed either way: a
+  broken edge is a broken claim, not a reason to lose the memory. The strict xfail that encoded this
+  (`test_out_of_vocabulary_spec_is_skipped_and_reported`) went red on the fix as `XPASS(strict)` and the
+  marker came off with it, and a second test covers the unparseable-spec shape.
+
 - **Fabric import mangled single-quoted, wrapped summaries** (#54). Fabric writes summaries as YAML
   single-quoted scalars and wraps long ones; the importer was line-based and only understood `"…"` and
   `[…]`, so those summaries arrived with their opening quote attached *and* truncated at the wrap — 88

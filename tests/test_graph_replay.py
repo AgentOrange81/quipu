@@ -180,16 +180,13 @@ def test_two_assertions_of_one_fact_rebuild_as_one_edge(cfg):
 # --- 3. a malformed edge spec must not cost the entry ---------------------------------
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="follow-up to #24 (PR #36); no dedicated issue in the repo's catalog — docs/ALPHA.md "
-    "and CHANGELOG's 'known at this version' name #23-#31 only. The reindex summary says "
-    "'... 1 edge skipped: likes is not in the vocabulary': it counts the skip but names NEITHER "
-    "the spec nor the entry, and 'ALPHA:likes:BETA' never appears, so a vault with twenty skips "
-    "cannot tell you which entry to fix")
 def test_out_of_vocabulary_spec_is_skipped_and_reported(cfg):
-    """A malformed edge spec must not cost the entry (already true) and the reindex summary must
-    name the skipped spec (the strict xfail above is the finding)."""
+    """A malformed edge spec must not cost the entry, and the report must be actionable.
+
+    The finding this encodes (#46): the summary used to say `... 1 edge skipped: likes is not in
+    the vocabulary` — the skip was counted but neither the spec nor the entry was named, so a vault
+    with twenty skips could not tell you which file to edit, and the same line repeated twenty times.
+    """
     notes = cfg.root / "notes"
     (notes / "s0000001-out-of-vocab-probe.md").write_text(
         _entry_md("s0000001", "the out-of-vocab probe entry", T1,
@@ -203,6 +200,24 @@ def test_out_of_vocabulary_spec_is_skipped_and_reported(cfg):
     assert report["edges"] == 0, "an out-of-vocabulary spec must be skipped, not asserted"
     summary = rx.stdout + rx.stderr
     assert "ALPHA:likes:BETA" in summary, "the reindex summary must name the skipped spec"
+    assert "s0000001" in summary, "…and the entry it came from, or nobody knows which file to fix"
+    assert "config.toml" in summary, "…and where the predicate vocabulary lives"
+    # one line per skip, so twenty skips read as twenty findings instead of one repeated sentence
+    assert summary.count("skipped:") == 1
+
+
+def test_a_malformed_spec_names_the_entry_too(cfg):
+    """The other skip shape: an unparseable spec. Same rule — entry and spec, not just a reason."""
+    notes = cfg.root / "notes"
+    (notes / "s0000002-malformed-spec-probe.md").write_text(
+        _entry_md("s0000002", "the malformed spec entry", T1, edges=["not-an-edge"]),
+        encoding="utf-8")
+
+    rx = run_cli("--vault", str(cfg.root), "reindex")
+    assert rx.returncode == 0, rx.stderr
+    summary = rx.stdout + rx.stderr
+    assert "s0000002" in summary and "not-an-edge" in summary
+    assert "src:predicate:dst" in summary
 
 
 # --- 4. the common case: a vault with no edges ----------------------------------------

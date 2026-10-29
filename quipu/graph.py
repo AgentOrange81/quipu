@@ -589,7 +589,9 @@ def rebuild(cfg: Config) -> dict:
     # order was old-then-new.
     #
     # A malformed or out-of-vocabulary spec is a broken claim, not a reason to lose the memory:
-    # the edge is skipped and counted, the entry is indexed either way.
+    # the edge is skipped and counted, the entry is indexed either way. What gets reported has to
+    # be actionable — the ENTRY and the SPEC, not just the offending predicate, because the
+    # markdown is the truth and a bare predicate name tells nobody which file to edit (#46).
     skipped: list[str] = []
     plan = []
     for e in sorted(entries.values(), key=lambda e: (e.created, e.id)):
@@ -597,10 +599,11 @@ def rebuild(cfg: Config) -> dict:
             try:
                 src, predicate, dst = parse_edge_spec(spec)
             except ValueError:
-                skipped.append(f"{spec!r} is not a src:predicate:dst spec")
+                skipped.append(f"{e.id}: {spec!r} is not a src:predicate:dst spec")
                 continue
             if predicate not in cfg.predicates:
-                skipped.append(f"{predicate} is not in the vocabulary")
+                skipped.append(f"{e.id}: {spec!r} (predicate {predicate!r} is not in the "
+                               f"vocabulary; add it to {cfg.config_path})")
                 continue
             key = (predicate, display_name(src), display_name(dst))
             at = replacement_start.get(key) or e.created
