@@ -25,6 +25,10 @@ jobs:
         run: ruff check .
       - name: test
         run: pytest -q
+      - name: benchmark harness self-tests
+        # `testpaths` points at tests/, so the harness's own tests are never collected by the step
+        # above; they still gate, because a harness that mis-scores publishes numbers (#47).
+        run: pytest -q benchmarks/tests
       - name: end-to-end smoke (no model needed)
         run: |
           python -m quipu --vault /tmp/v init
