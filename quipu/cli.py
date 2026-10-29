@@ -14,6 +14,7 @@ from . import export as export_mod
 from . import graph as graph_mod
 from . import index as index_mod
 from . import promote as promote_mod
+from . import repair as repair_mod
 from .importers import fabric as fabric_mod
 from .store import (
     Entry,
@@ -376,6 +377,27 @@ def cmd_audit(args) -> int:
     return 0 if not problems else 1
 
 
+def cmd_repair(args) -> int:
+    """Repair imported notes whose summary still carries its YAML quotes (#58). Dry run by default."""
+    cfg = _cfg(args)
+    result = repair_mod.find(cfg.root, args.source)
+    if not result.repairs:
+        print(json.dumps({"quoted_summaries": 0, "note": "nothing to repair"}, indent=2))
+        return 0
+    if not args.apply:
+        for rep in result.repairs:
+            state = rep.reason or f"from {rep.source}"
+            print(f"{rep.id}  [{state}]\n  old: {rep.old[:110]!r}\n  new: {rep.new[:110]!r}")
+        print(f"\n{len(result.repairs)} quoted summaries, {result.unresolved} with no recoverable source. "
+              f"Nothing written — re-run with --apply.", file=sys.stderr)
+        return 0
+    written = repair_mod.apply(cfg.root, result)
+    repair_mod.reindex(cfg.root)
+    print(json.dumps({"quoted_summaries": len(result.repairs), "rewritten": written,
+                      "unresolved": result.unresolved}, indent=2))
+    return 0 if result.unresolved == 0 else 1
+
+
 def cmd_brief(args) -> int:
     """Render the standing answer: promoted entries, one line each (#51). Derived, never an entry."""
     cfg = _cfg(args)
@@ -510,6 +532,10 @@ def build_parser() -> argparse.ArgumentParser:
                    help="fuse the lexical ranking with stored embeddings (#5)")
     s.add_argument("--embed-url", default="", help="override [embed] url")
     s.add_argument("--embed-model", default="", help="override [embed] model")
+
+    s = add("repair", "fix imported notes whose summary still carries its YAML quotes", cmd_repair)
+    s.add_argument("--source", default="~/fabric", help="where the fabric originals live")
+    s.add_argument("--apply", action="store_true", help="write the notes (default: dry run)")
 
     s = add("brief", "write the standing answer: promoted entries, one line each", cmd_brief)
     s.add_argument("--project", default="")

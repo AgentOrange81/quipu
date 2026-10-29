@@ -119,6 +119,28 @@ transaction. Edges are never deleted; the closed row keeps its window and `quipu
 it `"live": false`. `quipu audit` reports any superseded entry whose edge is still live, which is
 the shape a vault written by an older quipu is in.
 
+## Repairing the summaries an older import mangled
+
+An import from before the frontmatter fix left 88 notes with a quoted, truncated summary. The repair reads
+each one's origin and rewrites the note in place:
+
+```bash
+quipu --vault ~/vault repair
+```
+
+It is a dry run until you pass the apply flag, and it prints what each note would become, prefixed by
+where the fix came from: `fabric:<file>` when the fabric original was found by its frontmatter id,
+`body` when the note's own body carries the continuation the wrap cut off, or `quotes-only` when the text
+was complete and only the quotes were wrong.
+
+It never guesses. A summary that ends mid-word with no origin and no continuation in the body is reported
+and left exactly as it is — four notes on this box are in that state, and editing them is a human or
+model judgement call, not a repair. Nothing is renamed: the file keeps its path, so no second note appears
+under a new slug.
+
+Measured on the live vault: 88 quoted summaries, 74 recovered from the fabric origin, 10 from the note's
+own body, 10 more as quotes-only, and 4 left as findings. A second run finds nothing to do.
+
 ## Importing fabric: quoted and wrapped summaries
 
 Fabric's own writer emits frontmatter values as YAML **single-quoted** scalars and wraps long ones onto a
