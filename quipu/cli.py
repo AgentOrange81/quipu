@@ -13,7 +13,7 @@ from . import graph as graph_mod
 from . import index as index_mod
 from . import promote as promote_mod
 from .importers import fabric as fabric_mod
-from .store import Entry, find_entry, iter_entries, write_entry
+from .store import Entry, find_entry, format_edge_spec, iter_entries, parse_edge_spec, write_entry
 
 
 def _read_stdin() -> str:
@@ -58,19 +58,44 @@ def cmd_capture(args) -> int:
 
 def cmd_write(args) -> int:
     cfg = _cfg(args)
-    body = _read_stdin().strip() if not args.body else args.body
+    body = _read_stdin().strip() if args.body else args.body
+    specs = []
+    order = []
+    broken = 0
+    for spec in args.edge or []:
+        try:
+            src, predicate, dst = parse_edge_spec(spec)
+        except ValueError:
+            # a malformed spec is a broken claim, not a reason to lose the memory: the entry is
+            # written, the claim is skipped, and the reindex reports it.
+            print(f"--edge wants src:predicate:dst, got {spec!r}", file=sys.stderr)
+            broken += 1
+            order.append(spec)
+            continue
+        specs.append((spec, src, predicate, dst))
+        order.append(spec)
     e = Entry(kind=args.kind, state=args.state, agent=args.agent, project=args.project,
               session=args.session, summary=args.summary, evidence=args.evidence or "",
               ask=args.ask or "", importance=args.importance, body=body, source="cli",
-              supersedes=list(args.supersedes or []))
+              supersedes=list(args.supersedes or []), edges=order)
+    # The entry is written BEFORE the edges are asserted (docs/USING.md): a bad predicate must
+    # not cost the memory. The write then fails and the entry is left on disk but unindexed;
+    # `quipu reindex` puts it back, skipping the broken claim and saying so.
     p = write_entry(cfg.root, e)
-    for spec in args.edge or []:
+    failed = 0
+    for _spec, src, predicate, dst in specs:
+        # the entry's `created` is the window's start, so a rebuild from the markdown reproduces
+        # the same window instead of stamping it `now`
         try:
-            src, predicate, dst = (part.strip() for part in spec.split(":", 2))
-        except ValueError:
-            print(f"--edge wants src:predicate:dst, got {spec!r}", file=sys.stderr)
-            return 2
-        graph_mod.add_edge(cfg, src, predicate, dst, note_id=e.id, allow_new_predicate=args.allow_new)
+            graph_mod.add_edge(cfg, src, predicate, dst, note_id=e.id, at=e.created,
+                               allow_new_predicate=args.allow_new)
+        except ValueError as exc:
+            print(str(exc), file=sys.stderr)
+            failed += 1
+    if failed or broken:
+        # the write failed: the index is not refreshed, so the entry stays unindexed until a
+        # reindex runs. The markdown is the truth; the index is disposable.
+        return 2
     index_mod.reindex(cfg.root, cfg.db_path)
     graph_mod.materialize(cfg)
     print(p)
@@ -160,8 +185,17 @@ def cmd_show(args) -> int:
 
 def cmd_edge(args) -> int:
     cfg = _cfg(args)
-    eid = graph_mod.add_edge(cfg, args.src, args.predicate, args.dst, note_id=args.note or "",
-                             confidence=args.confidence, allow_new_predicate=args.allow_new)
+    if not args.note:
+        # an edge in no entry is an edge the markdown does not know about, and `rm index.db`
+        # would take it with the db. Say so, loudly, on stderr.
+        print("warning: no --note: this edge is in no entry, so a reindex will drop it",
+              file=sys.stderr)
+    try:
+        eid = graph_mod.add_edge(cfg, args.src, args.predicate, args.dst, note_id=args.note or "",
+                                 confidence=args.confidence, allow_new_predicate=args.allow_new)
+    except ValueError as exc:
+        print(str(exc), file=sys.stderr)
+        return 2
     graph_mod.materialize(cfg)
     print(eid)
     return 0
@@ -221,10 +255,24 @@ def cmd_export(args) -> int:
 
 
 def cmd_reindex(args) -> int:
+    """Rebuild the index AND the graph. The db is derived from the markdown, so this is the
+    honest recovery for a stale schema, a lost db, or a vault whose graph moved into notes."""
     cfg = _cfg(args)
     n = index_mod.reindex(cfg.root, cfg.db_path)
+    report = graph_mod.rebuild(cfg)
     graph_mod.materialize(cfg)
-    print(f"indexed {n} entries")
+    summary = f"indexed {n} entries, rebuilt {report['edges']} edges ({report['closed']} closed)"
+    skipped = report.get("skipped") or []
+    if skipped:
+        # a broken edge spec is reported, not fatal: the entry is indexed and the memory is kept
+        reasons = "; ".join(dict.fromkeys(skipped))
+        summary += f", {len(skipped)} edge{'' if len(skipped) == 1 else 's'} skipped: {reasons}"
+    print(summary)
+    if report["folded"]:
+        print(f"folded {report['folded']} db-only edges into the markdown")
+    if report["orphans"]:
+        print(f"warning: {report['orphans']} edges were in no entry and were dropped",
+              file=sys.stderr)
     return 0
 
 
@@ -248,7 +296,21 @@ def cmd_audit(args) -> int:
                 problems.append(f"{e.id}: supersedes missing entry {old}")
         if not e.summary:
             problems.append(f"{e.id}: empty summary")
-    print(json.dumps({"entries": len(entries), "problems": problems}, indent=2))
+    # the graph must live in the markdown (#24): an edge no entry records is data that
+    # `rm .quipu/index.db` would take with it.
+    c = index_mod.connect(cfg.db_path)
+    rows = c.execute("SELECT id, src, predicate, dst, note_id FROM edges").fetchall()
+    version = c.execute("PRAGMA user_version").fetchone()[0]
+    c.close()
+    unrecorded = []
+    for r in rows:
+        entry = entries.get(r["note_id"] or "")
+        spec = format_edge_spec(r["src"], r["predicate"], r["dst"])
+        if entry is None or not graph_mod.entry_records_edge(entry, spec):
+            unrecorded.append({"edge": r["id"], "spec": spec, "note_id": r["note_id"]})
+    print(json.dumps({"entries": len(entries), "problems": problems,
+                      "schema_version": version,
+                      "edges_not_in_markdown": unrecorded}, indent=2))
     return 0 if not problems else 1
 
 

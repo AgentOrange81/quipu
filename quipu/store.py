@@ -73,6 +73,29 @@ def _parse_scalar(raw: str):
     return raw
 
 
+#: The sections this writer generates from the frontmatter. They are stripped from the body
+#: before it is written back, so re-writing an entry - which happens every time a closure is
+#: recorded - does not duplicate them.
+GENERATED_SECTIONS = ("## Supersedes", "## Edges", "## Edge closures")
+
+
+def strip_generated(body: str) -> str:
+    """Drop the generated sections (and the bullets under them) from a body."""
+    out: list[str] = []
+    skipping = False
+    for line in (body or "").splitlines():
+        if line.strip() in GENERATED_SECTIONS:
+            skipping = True
+            continue
+        if skipping:
+            if line.startswith("#"):
+                skipping = False
+            else:
+                continue
+        out.append(line)
+    return "\n".join(out).strip()
+
+
 @dataclass
 class Entry:
     id: str = ""
@@ -91,6 +114,13 @@ class Entry:
     evidence: str = ""
     supersedes: list[str] = field(default_factory=list)
     tags: list[str] = field(default_factory=list)
+    #: The graph edges this entry asserted, as "SRC:PRED:DST" specs. The graph lives here, in the
+    #: markdown: a db that is deleted can be rebuilt from these (#24).
+    edges: list[str] = field(default_factory=list)
+    #: The windows this entry's edges closed: [{"spec": "SRC:PRED:DST", "at": "<instant>"}]. A
+    #: rebuild has to restore closed windows, not live ones - a resurrected belief is worse than a
+    #: lost one.
+    edge_closures: list[dict] = field(default_factory=list)
     body: str = ""
 
     def __post_init__(self) -> None:
@@ -132,16 +162,30 @@ class Entry:
             head.append("supersedes: " + json.dumps(self.supersedes, ensure_ascii=False))
         if self.tags:
             head.append("tags: " + json.dumps(self.tags, ensure_ascii=False))
+        if self.edges:
+            head.append("edges: " + json.dumps(self.edges, ensure_ascii=False))
+        if self.edge_closures:
+            head.append("edge_closures: " + json.dumps(self.edge_closures, ensure_ascii=False))
         title = self.summary or self.body.splitlines()[0] if (self.summary or self.body) else self.id
         parts = ["---"] + head + ["---", "", f"# {title}", ""]
         if self.summary:
             parts += [self.summary, ""]
         if self.evidence:
             parts += ["**Evidence:** " + self.evidence, ""]
-        if self.body:
-            parts += [self.body, ""]
+        # the H1/summary/evidence preamble is written from the fields above, so the body keeps
+        # only what the writer wrote. Re-writing an entry happens every time an edge or a closure
+        # is recorded into it, and a body that grew a copy per rewrite was unreadable within a
+        # dozen writes.
+        body = strip_generated(self.stripped_body())
+        if body:
+            parts += [body, ""]
         if self.supersedes:
             parts += ["## Supersedes", ""] + [f"- [[{s}]]" for s in self.supersedes] + [""]
+        if self.edges:
+            parts += ["## Edges", ""] + [f"- {spec}" for spec in self.edges] + [""]
+        if self.edge_closures:
+            parts += ["## Edge closures", ""] + [
+                f"- {c.get('spec', '')} closed at {c.get('at', '')}" for c in self.edge_closures] + [""]
         return "\n".join(parts)
 
     @classmethod
@@ -162,6 +206,12 @@ class Entry:
                 break
         tags = fm.get("tags") or []
         sup = fm.get("supersedes") or []
+        edges = fm.get("edges") or []
+        closures = fm.get("edge_closures") or []
+        if not isinstance(edges, list):
+            edges = [edges]
+        if not isinstance(closures, list):
+            closures = [closures]
         return cls(
             id=str(fm.get("id") or new_id()),
             kind=str(fm.get("kind") or "conclusion"),
@@ -179,6 +229,8 @@ class Entry:
             evidence=str(fm.get("evidence") or ""),
             supersedes=list(sup) if isinstance(sup, list) else [str(sup)],
             tags=list(tags) if isinstance(tags, list) else [str(tags)],
+            edges=[str(s) for s in edges],
+            edge_closures=[c for c in closures if isinstance(c, dict)],
             body=body.strip(),
         )
 
@@ -228,6 +280,25 @@ def iter_entries(root: str | Path):
 
 
 def find_entry(root: str | Path, eid: str) -> Path | None:
+    if not eid:
+        return None
     for p in (Path(root) / "notes").rglob(f"{eid}*.md"):
         return p
     return None
+
+
+#: The edge spec format the markdown carries: "SRC:PRED:DST". One definition, so the writer,
+#: the reader, the CLI and the graph cannot drift apart on how a spec is written or split.
+def format_edge_spec(src: str, predicate: str, dst: str) -> str:
+    return f"{src}:{predicate}:{dst}"
+
+
+def parse_edge_spec(spec: str) -> tuple[str, str, str]:
+    """Split "SRC:PRED:DST" into its three parts. Raises ValueError on a malformed spec."""
+    parts = (spec or "").split(":", 2)
+    if len(parts) != 3:
+        raise ValueError(f"edge spec must be src:predicate:dst, got {spec!r}")
+    src, predicate, dst = (p.strip() for p in parts)
+    if not src or not predicate or not dst:
+        raise ValueError(f"edge spec must be src:predicate:dst, got {spec!r}")
+    return src, predicate, dst
