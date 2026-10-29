@@ -8,6 +8,13 @@ truth and a migration is the user's data.
 
 ### Added
 
+- **`quipu ask-backfill`** — asks a chat endpoint one question per entry that has no `ask`, validates the
+  answer (one line, ends in `?`, 20–200 bytes, not a restatement of the summary) and writes it in place
+  after `summary:`, never renaming the note. Dry run by default, `--sample N` to review proposals,
+  `--count` to size the job. This is the verb that makes an imported corpus into training data: the
+  validation gate, not the model, is the guard rail, so a truncated or prose answer costs that entry only
+  and is reported as `skipped`. Live vault: 241 asks written, 36 rejected, `export sft` 18 → 265 (#27).
+
 - **`quipu repair`** — rewrites notes whose summary still carries the YAML quotes from an older import,
   preferring the fabric original (by frontmatter id), then the note's own body continuation, then a
   quotes-only fix when the text is whole. Dry run by default; a note with no recoverable source is

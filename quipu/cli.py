@@ -7,6 +7,7 @@ import sys
 from pathlib import Path
 
 from . import __version__
+from . import askfill as askfill_mod
 from . import brief as brief_mod
 from . import config as config_mod
 from . import embed as embed_mod
@@ -27,6 +28,10 @@ from .store import (
     parse_edge_spec,
     write_entry,
 )
+
+#: The on-box tier this box happens to serve. Overridable per call; nothing here assumes it exists.
+DEFAULT_CHAT_URL = "http://127.0.0.1:8081/v1/chat/completions"
+DEFAULT_CHAT_MODEL = "qwen3.8-flash-next-iq3_xxs"
 
 
 def _read_stdin() -> str:
@@ -377,6 +382,47 @@ def cmd_audit(args) -> int:
     return 0 if not problems else 1
 
 
+def cmd_ask_backfill(args) -> int:
+    """Write the question each entry answers (#27). Dry run unless --apply, sample first."""
+    cfg = _cfg(args)
+    # default to the free on-box tier; any OpenAI-compatible endpoint works (--url/--model/--api-key)
+    url = args.url or DEFAULT_CHAT_URL
+    model = args.model or DEFAULT_CHAT_MODEL
+    todo = askfill_mod.candidates(cfg.root, state=args.state, limit=args.limit)
+    if not todo:
+        print(json.dumps({"candidates": 0, "note": "every entry already has an ask"}, indent=2))
+        return 0
+    if args.count:
+        print(json.dumps({"candidates": len(todo)}, indent=2))
+        return 0
+
+    def progress(index, prop):
+        if args.verbose:
+            print(f"  [{index}/{len(todo)}] {prop.id} -> {prop.ask or prop.reason}", file=sys.stderr)
+
+    # a sample must not cost a whole-corpus run: bound it to the sample size
+    effective = args.limit or (args.sample if args.sample else 0)
+    result = askfill_mod.run(cfg.root, url, model, api_key=args.api_key or "",
+                             limit=effective, state=args.state, progress=progress)
+    for prop in result.proposals[: max(args.sample, 0) or None]:
+        print(f"{prop.id}  {prop.summary[:70]!r}\n  -> {prop.ask or '[' + prop.reason + ']'}")
+    if args.sample:
+        print(f"\n{len(result.proposals)} proposed, {result.skipped} skipped, {result.failed} failed "
+              f"— sample only, nothing written.", file=sys.stderr)
+        return 0
+    if not args.apply:
+        print(json.dumps({"candidates": len(result.proposals), "proposed": len(result.proposals)
+                          - result.skipped - result.failed, "skipped": result.skipped,
+                          "failed": result.failed, "written": 0,
+                          "note": "dry run — re-run with --apply"}, indent=2))
+        return 0
+    written = askfill_mod.apply(cfg.root, result)
+    askfill_mod.reindex(cfg.root)
+    print(json.dumps({"candidates": len(result.proposals), "written": written,
+                      "skipped": result.skipped, "failed": result.failed}, indent=2))
+    return 0 if result.failed == 0 else 1
+
+
 def cmd_repair(args) -> int:
     """Repair imported notes whose summary still carries its YAML quotes (#58). Dry run by default."""
     cfg = _cfg(args)
@@ -532,6 +578,17 @@ def build_parser() -> argparse.ArgumentParser:
                    help="fuse the lexical ranking with stored embeddings (#5)")
     s.add_argument("--embed-url", default="", help="override [embed] url")
     s.add_argument("--embed-model", default="", help="override [embed] model")
+
+    s = add("ask-backfill", "write the question each entry answers", cmd_ask_backfill)
+    s.add_argument("--url", default="", help="OpenAI-compatible /chat/completions endpoint")
+    s.add_argument("--model", default="", help="model id at that endpoint")
+    s.add_argument("--api-key", default="", help="bearer token (usually not needed for a local tier)")
+    s.add_argument("--state", default="promoted", help="only entries in this state ('' for all)")
+    s.add_argument("--limit", type=int, default=0, help="stop after N entries (0 = all)")
+    s.add_argument("--sample", type=int, default=0, help="print N proposals and write nothing")
+    s.add_argument("--count", action="store_true", help="just report how many entries are missing an ask")
+    s.add_argument("--apply", action="store_true", help="write the ask lines (default: dry run)")
+    s.add_argument("--verbose", action="store_true")
 
     s = add("repair", "fix imported notes whose summary still carries its YAML quotes", cmd_repair)
     s.add_argument("--source", default="~/fabric", help="where the fabric originals live")

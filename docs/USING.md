@@ -261,6 +261,35 @@ the live 850-entry vault the ten hand-judged questions scored 8/10 under hybrid 
 bm25. Semantic similarity has no notion of "that was superseded"; the graph does. Use `--hybrid` for
 questions that share no vocabulary with the corpus, not as a default.
 
+## The question an entry answers
+
+An entry carries two halves: the `summary` (the claim) and the `ask` (the question a searcher would have
+asked to find it). `quipu export sft` needs both — an entry without an ask is recall only, it teaches
+nothing — and a vault migrated from an older system mostly has no asks, because the old format never
+stored one. `ask-backfill` writes them:
+
+```bash
+quipu --vault ~/vault ask-backfill --count         # how many entries have no ask
+quipu --vault ~/vault ask-backfill --sample 5      # print five proposals, write nothing
+quipu --vault ~/vault ask-backfill --apply         # write the ask lines in place
+```
+
+One model call per entry, temperature 0, no chain, no tools, against the OpenAI-compatible endpoint in
+`.quipu/config.toml` (`[llm] base_url`; `--url`/`--model`/`--api-key` override it, and a cloud key is the
+usual reason to). Validation is the guard rail, not the model: an answer must be one line ending in `?`,
+between 20 and 200 bytes, and not a restatement of the summary with a question mark bolted on. Anything
+else — prose, a quote, `NONE`, a question cut off mid-word — costs that entry and nothing else, and is
+reported as `skipped` with the reason.
+
+The `max_tokens` cap is 400 on purpose: a reasoning model spends the budget on `reasoning_content`
+first, and at 80 it truncated most answers, which then read as a bad model instead of a bad cap.
+
+Writing is in place: the `ask:` line lands after `summary:`, the path does not change, and the body is
+not touched — the same discipline `quipu repair` follows, so no second note appears under a new slug.
+
+Measured on the live vault (870 entries, 301 promoted): `--count` reported 265 missing, a corpus run
+wrote 241 and rejected 36, and `quipu export sft` went from 18 examples to 265.
+
 ## Exporting
 
 | command | when you want it | what each record carries |
