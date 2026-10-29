@@ -354,9 +354,19 @@ Proposals are de-duplicated by summary across chunks — neighbouring context ma
 twice, and one claim must stay one entry. `quipu hook` uses the same loader and chunker and takes the same
 `--max-chars`; its `--timeout` still bounds the **whole** pass, not each chunk.
 
-Sizing note: the model's read timeout is per request, not per pass, so `--max-chars` has to be sized to the
-endpoint. On this box's local 35B that means roughly 1–3 KB per chunk; a bigger cap buys fewer chunks and
-more timeouts.
+### The two timeouts
+
+Two different budgets, and they are not interchangeable. `[llm] timeout` in `.quipu/config.toml` (default
+120 s) is the read timeout for **one request** to the model endpoint — raise it when a single chunk is
+simply slow. `--endpoint-timeout SECONDS` on `quipu reflect` and `quipu hook` overrides it for that
+command only. `quipu hook --timeout` is the other knob entirely: the budget for the **whole pass**, all
+chunks together — raise it when the pass as a whole is running long. A value of `0`, a negative number or
+a non-integer is refused with an error naming `llm.timeout`.
+
+```toml
+[llm]
+timeout = 240
+```
 
 ## Exporting
 
