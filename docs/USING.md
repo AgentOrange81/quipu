@@ -396,8 +396,11 @@ The transcript is required. `quipu reflect --fake response.json` on its own exit
 `empty transcript`; the transcript can also be piped in on stdin. `examples/demo.sh` runs this
 whole path with no model. Without `--fake`, `reflect` talks to the OpenAI-compatible endpoint in
 `.quipu/config.toml` (`[llm] base_url`, default `http://127.0.0.1:8080/v1`), and if nothing is
-listening it fails with `RuntimeError: LLM request failed: <urlopen error [Errno 111] Connection
-refused>`. `--dry-run` prints the proposals and writes nothing.
+listening it fails with a message naming the URL it tried — `RuntimeError: LLM request failed:
+http://127.0.0.1:8080/v1/chat/completions: <urlopen error [Errno 111] Connection refused>` —
+and the command exits non-zero. An HTTP error is reported with its status code, and a body that is
+not the expected JSON names the URL too, so a broken endpoint is never mistaken for a model with
+nothing to say. `--dry-run` prints the proposals and writes nothing.
 
 **The promotion rate.** `quipu stats` reports `promotion_rate` as promoted ÷ total entries. Near
 **1.0** means nearly everything was promoted: you are writing curated entries and barely capturing
