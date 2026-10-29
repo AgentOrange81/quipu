@@ -349,6 +349,20 @@ before it asserts the edges, so a bad predicate leaves the entry on disk but uni
 search` will not find it until `quipu reindex` runs. The index is disposable; the markdown is the
 truth, and a reindex rebuilds it in milliseconds.
 
+**A skipped edge at reindex.** A spec in an entry's frontmatter that is malformed, or whose predicate
+is outside the vocabulary, is a broken claim — not a reason to lose the entry. The entry is indexed
+either way, and `reindex` counts the skips and prints one finding per skipped spec, naming the entry
+and the spec so you know which file to open:
+
+```
+indexed 873 entries, rebuilt 2 edges (0 closed), 1 edge skipped
+  skipped: 41ab77c0: 'not-an-edge' is not a src:predicate:dst spec
+```
+
+An out-of-vocabulary predicate is reported the same way: the entry, the spec, and the config file to
+add the predicate to. Fix it in the note's frontmatter, or add the predicate to `.quipu/config.toml`
+and reindex. A vault with twenty skips prints twenty lines, not one line twenty times.
+
 ## See also
 
 [DESIGN.md](DESIGN.md) — the layers, the gate, why `ask` is required.
