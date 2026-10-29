@@ -8,6 +8,12 @@ truth and a migration is the user's data.
 
 ### Added
 
+- **`quipu brief`** — the standing answer an agent boots with: promoted entries, one line each, grouped
+  by kind, importance-first, deterministic and model-free, written to `.quipu/brief/` (derived, never
+  beside the entries). Default 40 entries ≈ 2.5k tokens; `--limit 0` for all of them (#51).
+- **One sentence per summary** — `quipu write` and MCP `write` now refuse a summary over 280 bytes and
+  point at `--body`, because a blob is the one entry class no ranking lever could fix. `write_entry`
+  itself is unchanged, so importers still migrate historical notes (#51).
 - **Optional semantic search** (`quipu embed`, `quipu search --hybrid`, #5). Vectors come from any
   OpenAI-compatible `/v1/embeddings` endpoint over plain `urllib` — the package still has zero runtime
   dependencies — and are stored in the disposable index. Search fuses the lexical ranking with the
