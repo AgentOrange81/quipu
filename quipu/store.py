@@ -75,6 +75,32 @@ def looks_like_transcript(summary: str) -> bool:
     return False
 
 
+#: A summary is the retrieval handle: it is what ranks, what a brief line shows, and what an SFT example
+#: is made of. Past this size it stops being a handle and becomes a blob — the class of entry that ranked
+#: badly for three separate measured reasons in October and could not be fixed by any ranking lever.
+#: Enforced at the CAPTURE surface (`quipu write`, MCP write), not in `write_entry`: an importer migrating
+#: 800 historical notes must not be blocked by a rule about new ones.
+SUMMARY_LIMIT_BYTES = 280
+
+
+class SummaryTooLong(ValueError):
+    def __init__(self, summary: str, limit: int = SUMMARY_LIMIT_BYTES):
+        self.size = len(summary.encode("utf-8"))
+        self.limit = limit
+        super().__init__(
+            f"summary is {self.size} bytes, limit {limit}: this is a blob, not a handle. "
+            f"Put the detail in --body and keep one sentence here "
+            f"(the first {limit} bytes are: {summary.encode('utf-8')[:limit].decode('utf-8', 'ignore')!r}…)")
+
+
+def check_summary(summary: str, limit: int = SUMMARY_LIMIT_BYTES, allow_long: bool = False) -> None:
+    """Raise `SummaryTooLong` unless the summary fits, or the caller deliberately opted out."""
+    if allow_long:
+        return
+    if len((summary or "").encode("utf-8")) > limit:
+        raise SummaryTooLong(summary, limit)
+
+
 def _scalar(v) -> str:
     if isinstance(v, bool):
         return "true" if v else "false"

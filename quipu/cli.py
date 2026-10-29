@@ -7,6 +7,7 @@ import sys
 from pathlib import Path
 
 from . import __version__
+from . import brief as brief_mod
 from . import config as config_mod
 from . import embed as embed_mod
 from . import export as export_mod
@@ -16,6 +17,8 @@ from . import promote as promote_mod
 from .importers import fabric as fabric_mod
 from .store import (
     Entry,
+    SummaryTooLong,
+    check_summary,
     find_entry,
     format_edge_spec,
     iter_entries,
@@ -83,6 +86,11 @@ def cmd_write(args) -> int:
             continue
         specs.append((spec, src, predicate, dst))
         order.append(spec)
+    try:
+        check_summary(args.summary, allow_long=getattr(args, "allow_long_summary", False))
+    except SummaryTooLong as exc:
+        print(str(exc), file=sys.stderr)
+        return 2
     e = Entry(kind=args.kind, state=args.state, agent=args.agent, project=args.project,
               session=args.session, summary=args.summary, evidence=args.evidence or "",
               ask=args.ask or "", importance=args.importance, body=body, source="cli",
@@ -352,6 +360,26 @@ def cmd_audit(args) -> int:
     return 0 if not problems else 1
 
 
+def cmd_brief(args) -> int:
+    """Render the standing answer: promoted entries, one line each (#51). Derived, never an entry."""
+    cfg = _cfg(args)
+    scope = args.project or args.agent or ""
+    text = brief_mod.build((e for _p, e in iter_entries(cfg.root)), project=args.project,
+                           agent=args.agent, scope=scope, max_lines=args.limit)
+    if args.stdout:
+        sys.stdout.write(text)
+        return 0
+    rel = args.out or brief_mod.default_relpath(scope)
+    path = Path(cfg.root) / ".quipu" / rel
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text, encoding="utf-8")
+    lines = text.count("\n- ") + text.count("\n  - ")
+    print(f"{path} ({len(text.encode('utf-8'))} bytes, {lines} lines) · {brief_mod.stamp()}",
+          file=sys.stderr)
+    print(str(path))
+    return 0
+
+
 def cmd_embed(args) -> int:
     """Build or refresh the vector index for this vault (#5). Derived data: re-run after a reindex."""
     cfg = _cfg(args)
@@ -425,6 +453,8 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--edge", action="append", metavar="SRC:PRED:DST",
                    help="assert a graph edge from this entry (repeatable)")
     s.add_argument("--allow-new", action="store_true")
+    s.add_argument("--allow-long-summary", action="store_true",
+                   help=f"permit a summary over {280} bytes (you almost certainly want --body)")
 
     add("mcp", "serve the vault over MCP (stdio JSON-RPC)", cmd_mcp)
 
@@ -460,6 +490,14 @@ def build_parser() -> argparse.ArgumentParser:
                    help="fuse the lexical ranking with stored embeddings (#5)")
     s.add_argument("--embed-url", default="", help="override [embed] url")
     s.add_argument("--embed-model", default="", help="override [embed] model")
+
+    s = add("brief", "write the standing answer: promoted entries, one line each", cmd_brief)
+    s.add_argument("--project", default="")
+    s.add_argument("--agent", default="")
+    s.add_argument("--limit", type=int, default=brief_mod.DEFAULT_LIMIT,
+                   help=f"max entries (default {brief_mod.DEFAULT_LIMIT}, 0 = all)")
+    s.add_argument("--out", default="", help="path relative to .quipu/ (default .quipu/brief/<scope>.md)")
+    s.add_argument("--stdout", action="store_true", help="print instead of writing")
 
     s = add("embed", "build or refresh the vector index (needs an embeddings endpoint)", cmd_embed)
     s.add_argument("--url", dest="embed_url", default="", help="OpenAI-compatible /v1/embeddings")

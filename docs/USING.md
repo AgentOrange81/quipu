@@ -119,6 +119,43 @@ transaction. Edges are never deleted; the closed row keeps its window and `quipu
 it `"live": false`. `quipu audit` reports any superseded entry whose edge is still live, which is
 the shape a vault written by an older quipu is in.
 
+## The brief: what an agent reads before it knows what to ask
+
+A vault answers a question well. It does not help an agent that has just woken up and has no question
+yet — so `quipu brief` writes the standing answer: promoted entries only, one line each, grouped by kind,
+highest importance first.
+
+```bash
+quipu --vault ~/vault brief                      # -> .quipu/brief/vault.md, 40 entries
+quipu --vault ~/vault brief --project quipu      # -> .quipu/brief/quipu.md
+quipu --vault ~/vault brief --stdout --limit 0   # everything, to a pipe
+```
+
+It is deterministic and model-free: no retrieval, no ranking, no LLM call, so the same vault always
+renders the same bytes. It is also **derived**, like the FTS table: it lives under `.quipu/brief/`, never
+beside the entries in `notes/`, because a generated page among the entries would be ingested as an entry
+and rank for everything it mentions.
+
+The default is 40 entries (about 10 KB / 2.5k tokens). Measured on the live vault, all 289 promoted
+entries render 81 KB / ~20k tokens, which is a document rather than a boot page; `--limit 0` is there for
+a human, not for a context window.
+
+## One sentence per summary, and the limit enforces it
+
+`quipu write` and the MCP `write` tool refuse a `summary` over **280 bytes**:
+
+```
+summary is 412 bytes, limit 280: this is a blob, not a handle. Put the detail in --body and keep one
+sentence here (the first 280 bytes are: 'Resolved the issue where the ComfyUI server...'…)
+```
+
+The summary is the retrieval handle — it is what bm25 ranks, what a brief line shows, and what an SFT
+example is built from. Blobs are the entry class that ranked badly for three separately measured reasons
+in October, and no ranking lever fixed them, because the input was wrong. So the writing is where they
+stop. `--allow-long-summary` exists for a deliberate exception; importers are unaffected, since the limit
+sits on the capture surfaces and not in `write_entry` — migrating 800 historical notes must never be
+blocked by a rule about new ones.
+
 ## Optional semantic search
 
 `quipu search` is lexical (SQLite FTS5 + bm25) and works with nothing else installed. When a vault's

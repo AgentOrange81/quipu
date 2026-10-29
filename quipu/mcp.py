@@ -22,7 +22,7 @@ from . import config as config_mod
 from . import export as export_mod
 from . import graph as graph_mod
 from . import index as index_mod
-from .store import Entry, parse_edge_spec, write_entry
+from .store import Entry, check_summary, parse_edge_spec, write_entry
 
 PROTOCOL_VERSION = "2025-06-18"
 
@@ -63,6 +63,9 @@ def _write(cfg, args: dict) -> dict:
     summary = str(args.get("summary") or "").strip()
     if not summary:
         raise ValueError("write needs a summary — the retrieval handle of the entry")
+    # same rule as `quipu write`, and here there is no opt-out: the size limit is what keeps a summary a
+    # retrieval handle instead of a blob (#51)
+    check_summary(summary)
     specs = list(args.get("edges") or [])
     parsed, order, broken = [], [], []
     for spec in specs:
