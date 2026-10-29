@@ -165,6 +165,30 @@ capture. Junk summaries belong to #30, not to a multiplier on state.
 `search` and prints every one, so a weighting that fails the measurement gets reverted in public
 rather than quietly kept.
 
+### Rejected: query shaping and focus scoring (#48)
+
+A blob — a session report, or a multi-topic "pack" entry — can outrank a focused note for any single
+topic inside it: bm25 rewards coverage, not concentration, and the AND includes function words
+("which", "is", "the", "for", "this"), so a 4,000-word report matches everything a focused note fails
+to match. `benchmarks/sweep_focus.py` measures the two candidate fixes separately, riding on the
+shipped `search` (the stopword variant rewrites the query text, the focus variant re-scores the
+shipped candidate window — neither reimplements retrieval).
+
+Measured 2026-10-29, synthetic (100 queries) and live (ten hand-judged questions):
+
+| variant | live ok | live promoted | R@5 | R@10 | MRR |
+|---|---|---|---|---|---|
+| shipped | 9/10 | 7/10 | 0.640 | 0.900 | 0.318 |
+| strip stopwords | 9/10 | 6/10 | 0.650 | 0.900 | 0.319 |
+| focus factor | 9/10 | 6/10 | 0.650 | 0.900 | 0.319 |
+| both | 9/10 | 6/10 | 0.660 | 0.900 | 0.320 |
+
+**Rejected.** +0.02 R@5 for a maintenance-bearing stoplist plus a second scoring term, no live gain,
+and a worse one — promoted-at-rank-1 drops 7 -> 6. The live failures were not blobs at all; they were
+facts the vault did not contain, and writing those entries fixed the answers with no code change
+(rank-1 promoted 6/10 -> 8/10 across three curated entries). The negative result is recorded here so
+the next person does not re-run the same three variants hoping for a different answer.
+
 ## Honesty rules
 
 - A number that is not in `results/` does not exist. No number appears in this file that is not
