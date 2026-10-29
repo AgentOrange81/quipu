@@ -13,7 +13,15 @@ from . import graph as graph_mod
 from . import index as index_mod
 from . import promote as promote_mod
 from .importers import fabric as fabric_mod
-from .store import Entry, find_entry, format_edge_spec, iter_entries, parse_edge_spec, write_entry
+from .store import (
+    Entry,
+    find_entry,
+    format_edge_spec,
+    iter_entries,
+    looks_like_transcript,
+    parse_edge_spec,
+    write_entry,
+)
 
 
 def _read_stdin() -> str:
@@ -133,11 +141,13 @@ def cmd_import(args) -> int:
     if args.dry_run:
         cfg = config_mod.load(vault, create=False)
         result = fabric_mod.import_fabric(src, cfg.root, dry_run=True,
-                                         include_noise=args.include_noise)
+                                         include_noise=args.include_noise,
+                                         promote_threshold=cfg.promote_threshold)
         print(json.dumps(_import_summary(result, src, vault, True), indent=2))
         return 0
     cfg = config_mod.load(vault, create=True)
-    result = fabric_mod.import_fabric(src, cfg.root, dry_run=False, include_noise=args.include_noise)
+    result = fabric_mod.import_fabric(src, cfg.root, dry_run=False, include_noise=args.include_noise,
+                                      promote_threshold=cfg.promote_threshold)
     index_mod.reindex(cfg.root, cfg.db_path)
     print(json.dumps(_import_summary(result, src, vault, False), indent=2))
     return 0
@@ -291,6 +301,10 @@ def cmd_audit(args) -> int:
     for e in entries.values():
         if e.state == "promoted" and not e.evidence:
             problems.append(f"{e.id}: promoted without evidence")
+        if e.state == "promoted" and looks_like_transcript(e.summary):
+            # a trusted entry whose summary is a pasted tool transcript (#30): an agent reads it
+            # as a statement. Filed as a class so a vault can be triaged without reading it.
+            problems.append(f"{e.id}: suspicious_summary")
         for old in e.supersedes:
             if old not in entries:
                 problems.append(f"{e.id}: supersedes missing entry {old}")

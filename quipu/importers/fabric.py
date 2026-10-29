@@ -53,7 +53,8 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 
-from ..store import Entry, write_entry
+from ..config import DEFAULT_PROMOTE_THRESHOLD
+from ..store import Entry, looks_like_transcript, write_entry
 
 #: fabric `type` -> quipu `kind`; unknown types fall back to DEFAULT_KIND
 KIND_BY_TYPE = {
@@ -88,6 +89,12 @@ IGNORED_NAMES = frozenset({"README.md", "FRONTMATTER-TEMPLATE.md"})
 #: why an entry landed in the pruned state (a tag, never a supersedes edge)
 PRUNED_TAG = "pruned:low-training-value"
 
+#: an entry that claimed `promoted` without evidence was demoted to raw (#26)
+NO_EVIDENCE_TAG = "import:no-evidence"
+
+#: an entry whose summary is a pasted tool transcript, not a claim (#30)
+TRANSCRIPT_TAG = "import:transcript-dump"
+
 _FM_RE = re.compile(r"\A---[ \t]*\r?\n(.*?)\r?\n---[ \t]*(?:\r?\n|\Z)", re.S)
 _KV_RE = re.compile(r"^([A-Za-z_][A-Za-z0-9_-]*)[ \t]*:[ \t]*(.*)$")
 _ID_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,63}")
@@ -105,11 +112,16 @@ class ImportResult:
 
 
 def import_fabric(src_dir: str | Path, vault_root: str | Path, *,
-                  dry_run: bool = False, include_noise: bool = False) -> ImportResult:
+                  dry_run: bool = False, include_noise: bool = False,
+                  promote_threshold: float = DEFAULT_PROMOTE_THRESHOLD) -> ImportResult:
     """Convert a fabric corpus into quipu entries under `vault_root`.
 
     Only the files directly in `src_dir` are considered -- a corpus keeps its stubs and
     duplicates in sibling directories, and those are not what an import is for.
+
+    `promote_threshold` is quipu's own promotion gate: an entry is promoted only when its
+    importance clears it AND it carries evidence - the same gate promote.py applies. Without it
+    509 of 780 imported entries claimed `promoted` while having no evidence at all (#26).
     """
     src = Path(src_dir).expanduser().resolve()
     root = Path(vault_root).expanduser().resolve()
@@ -142,8 +154,28 @@ def import_fabric(src_dir: str | Path, vault_root: str | Path, *,
             result.skipped.append(path)
             continue
         kind = KIND_BY_TYPE.get(ftype.lower(), DEFAULT_KIND)
-        state = STATE_BY_TRAINING_VALUE.get(training_value, DEFAULT_STATE)
         summary = _scalar(fm.get("summary"))
+        evidence = _evidence(fm)
+        importance = IMPORTANCE_BY_TRAINING_VALUE.get(training_value, 0.0)
+        state = STATE_BY_TRAINING_VALUE.get(training_value, DEFAULT_STATE)
+
+        # #30: a pasted tool transcript is not a claim. It is imported pruned, with a tag -
+        # visible and reversible - and never promoted.
+        transcript = looks_like_transcript(summary)
+        if transcript:
+            state = "pruned"
+        elif state == "promoted" and not (importance >= promote_threshold and evidence):
+            # #26: the same gate promote.py applies. `promoted` is a claim that the entry
+            # cleared the bar; without evidence it cleared nothing.
+            state = "raw"
+
+        tags = _tags(fm, state)
+        if transcript:
+            tags.append(TRANSCRIPT_TAG)
+        elif state == "raw" and STATE_BY_TRAINING_VALUE.get(training_value) == "promoted" \
+                and not evidence:
+            tags.append(NO_EVIDENCE_TAG)
+
         entry = Entry(
             id=_entry_id(fm, rel, claimed),
             kind=kind,
@@ -154,10 +186,10 @@ def import_fabric(src_dir: str | Path, vault_root: str | Path, *,
             created=_created(fm.get("timestamp")),
             source=f"fabric:{rel}",
             confidence=_confidence(fm),
-            importance=IMPORTANCE_BY_TRAINING_VALUE.get(training_value, 0.0),
+            importance=importance,
             summary=summary,
-            evidence=_evidence(fm),
-            tags=_tags(fm, state),
+            evidence=evidence,
+            tags=tags,
             body=_strip_preamble(body, summary),
         )
         if not dry_run:

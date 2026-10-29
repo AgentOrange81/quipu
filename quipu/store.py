@@ -35,6 +35,45 @@ def new_id() -> str:
 #: a string that only looks numeric must stay a string.
 NUMBER_RE = re.compile(r"^-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?$")
 
+#: Markers of a pasted tool transcript. A summary that carries one is the output of a tool, not
+#: a claim anybody made (#30).
+TRANSCRIPT_MARKERS = ("FILES:", "GATE:", "MAP:")
+
+#: A path on its own - "quipu/graph.py", "/home/dirk/x.md" - is a file listing, not a sentence.
+_BARE_PATH_RE = re.compile(r"^[\w.~@+-]+(?:/[\w.~@+-]+)*\.[A-Za-z0-9]{1,8}$")
+
+#: A lowercase word of three letters or more: the mark of prose.
+_PROSE_RE = re.compile(r"[a-z]{3,}")
+
+#: The end of a sentence.
+_SENTENCE_END_RE = re.compile(r"[.!?…]")
+
+
+def looks_like_transcript(summary: str) -> bool:
+    """Is this summary a pasted tool transcript rather than a claim? (#30)
+
+    The summary is the retrieval signal: an agent reads it as a statement, so a pasted
+    transcript reads as a statement too - and is worthless. It is caught at import and filed as
+    `pruned` with a tag: visible, reversible, and never promoted.
+
+    A transcript starts with a code fence, carries a tool marker (FILES:, GATE:, MAP:), spans
+    more than one paragraph, is a bare path, or has no sentence structure at all.
+    """
+    s = (summary or "").strip()
+    if not s:
+        return False
+    if s.startswith("```"):
+        return True
+    if any(marker in s for marker in TRANSCRIPT_MARKERS):
+        return True
+    if "\n\n" in s:
+        return True
+    if _BARE_PATH_RE.match(s):
+        return True
+    if not _SENTENCE_END_RE.search(s) and not _PROSE_RE.findall(s):
+        return True
+    return False
+
 
 def _scalar(v) -> str:
     if isinstance(v, bool):
