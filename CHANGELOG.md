@@ -6,6 +6,13 @@ truth and a migration is the user's data.
 
 ## Unreleased
 
+### Added
+
+- **`quipu repair`** — rewrites notes whose summary still carries the YAML quotes from an older import,
+  preferring the fabric original (by frontmatter id), then the note's own body continuation, then a
+  quotes-only fix when the text is whole. Dry run by default; a note with no recoverable source is
+  reported and left untouched; nothing is renamed. Live vault: 84 of 88 repaired, 4 reported (#58).
+
 ### Fixed
 
 - **Fabric import mangled single-quoted, wrapped summaries** (#54). Fabric writes summaries as YAML
