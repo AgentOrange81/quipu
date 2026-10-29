@@ -8,6 +8,14 @@ truth and a migration is the user's data.
 
 ### Added
 
+- **The endpoint read timeout is configurable** (`[llm] timeout`, `--endpoint-timeout`, #68). One
+  request to the model endpoint is now bounded by a read timeout that defaults to 120 s; a vault
+  whose `.quipu/config.toml` carries no `timeout` key keeps that default. `--endpoint-timeout
+  SECONDS` on `quipu reflect` and `quipu hook` overrides it for that command. A value of `0`, a
+  negative number or a non-integer is refused with an error naming `llm.timeout`. Why the knob
+  exists, measured on this box's local `qwen3.6-35b-a3b`: ~3 KB of transcript takes 104 s, and a
+  3.5 KB chunk fails on the old fixed 120 s cap.
+
 - **Transcripts are loaded by shape and chunked on turn boundaries** (`quipu reflect --max-chars`, #2).
   Hermes session JSONL (`role`/`content`, a string or a list of text parts) is rendered as `role: text`;
   markdown passes through; meta rows and malformed lines are skipped, not fatal. The pass runs per chunk,
