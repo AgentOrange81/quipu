@@ -42,7 +42,7 @@ from quipu.index import COLUMN_WEIGHTS, _fts_query, _fts_query_or, connect, sear
 #: The gold ids were verified one at a time against the 2026-10-29 copy of ~/quipu-vault; NOTES below
 #: says where each answer lives and why two of the lists are empty.
 QUERIES = [
-    ("why did glitch memory run at 3200 fclk", ("fclk", "3200", "mce"), ()),
+    ("why did glitch memory run at 3200 fclk", ("fclk", "3200", "mce"), ("0c0857e6",)),
     ("which model is the gateway default for this team", ("minimax", "model", "gateway"),
      ("f3a6f614",)),
     ("where is the cloudflare tunnel token", ("cloudflared", "tunnel", "token", "cert.pem"),
@@ -51,7 +51,7 @@ QUERIES = [
      ("1c8868f3",)),
     ("how do we back up secrets to usb", ("usb", "secret", "backup", "key"),
      ("0058934e",)),
-    ("which gpu should i buy for local ai", ("gpu", "vram", "6700", "3090", "4080"), ()),
+    ("which gpu should i buy for local ai", ("gpu", "vram", "6700", "3090", "4080"), ("2a0a7986",)),
     ("how do we deploy a pump.fun token", ("pump", "deploy", "token"),
      ("f15354cd", "8c2f0d51")),
     ("obs overlay transparency keying", ("obs", "transparen", "chroma", "alpha"),
@@ -64,12 +64,14 @@ QUERIES = [
 
 NOTES = {
     "why did glitch memory run at 3200 fclk":
-        "The fact (3960X, 4x16 @3200 FCLK 1600, and 3600 throwing 649 MCEs) lives only in a raw session "
-        "blob's body. The promoted hits are the OTHER box (3900X DOCP 3600, FCLK 1800) and a stale claim "
-        "that glitch is a 3900X — both wrong for this machine. Curation gap: no entry states it.",
+        "The fact lived only in a raw session blob's body until 2026-10-29, when it was written as its own "
+        "entry (`0c0857e6`, evidence re-checked with lscpu + dmidecode over ssh). Before that the promoted "
+        "hits were the OTHER box (3900X DOCP 3600, FCLK 1800) and a stale claim that glitch is a 3900X — "
+        "both wrong for this machine and worse than a miss, because they read as authoritative.",
     "which gpu should i buy for local ai":
-        "Nothing in the corpus answers a purchase question; the GPU guidance lives in a skill, not the "
-        "vault. Curation gap — and the subject stems still score, which is exactly what #47 is about.",
+        "Nothing in the corpus answered a purchase question until 2026-10-29, when the standing stance was "
+        "written as its own entry (`2a0a7986`, from the local-ai-gpu-selection skill). The subject stems "
+        "scored before the entry existed, which is exactly what #47 is about.",
     "how do we deploy a pump.fun token":
         "The launcher-UI note wins rank 1 on the word 'launcher'; the notes that answer 'how' are the "
         "battle-tested launch toolkit and the re-architected Python tx builder.",

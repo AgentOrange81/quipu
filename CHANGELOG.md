@@ -35,6 +35,15 @@ truth and a migration is the user's data.
   its variants mean anything. `pytest benchmarks/tests` joins CI, since `testpaths` never reached those
   tests. Result file: `benchmarks/results/live-2026-10-29.json`.
 
+- **Two of the ten live questions had no answer in the vault; writing them took `rank1_gold` from 6/10 to
+  8/10 with no code change** (#61). The rank-1 hits for "glitch memory at 3200 FCLK" were the *other* box's
+  3900X DOCP note and a stale claim that glitch is a 3900X, and nothing answered "which GPU should I buy".
+  Both are now single-purpose `promoted` entries: the Threadripper 3960X at 4x16 GB / 3200 MT/s / FCLK 1600
+  with its `lscpu` + `dmidecode` evidence re-checked over ssh, and the standing no-purchase-while-mining
+  stance with its layer-split and VRAM reasoning. The remaining two misses are `gold_in_5` hits — right note
+  in the list, wrong note first. Curation moved the number; no weight, no ranking change, and the summary
+  column went 9/10 -> 10/10 only as a side effect.
+
 - **Fabric import mangled single-quoted, wrapped summaries** (#54). Fabric writes summaries as YAML
   single-quoted scalars and wraps long ones; the importer was line-based and only understood `"…"` and
   `[…]`, so those summaries arrived with their opening quote attached *and* truncated at the wrap — 88
