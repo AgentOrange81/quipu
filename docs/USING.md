@@ -290,6 +290,34 @@ not touched — the same discipline `quipu repair` follows, so no second note ap
 Measured on the live vault (870 entries, 301 promoted): `--count` reported 265 missing, a corpus run
 wrote 241 and rejected 36, and `quipu export sft` went from 18 examples to 265.
 
+## Hooking a session end
+
+A framework can call one command when a session ends, without embedding quipu and without deciding
+anything about memory itself:
+
+```bash
+quipu --vault ~/vault hook --transcript session.md --agent glitch --project quipu
+```
+
+It reads the transcript (a path, or `-` for stdin), runs the reflection pass, writes what survives the
+promotion gate, and indexes it. The contract is the exit code, because that is all a framework reads:
+**0 only if the pass completed**, non-zero with the reason on stderr otherwise. A transport error, an
+unparseable response, a missing transcript or a hung endpoint is a failure — and nothing is written
+until the model has answered in full, so a failed pass leaves the vault exactly as it was.
+
+- `--timeout` (default 300 s) bounds the reflection call on a worker thread, because a blocking
+  `urlopen` has no deadline of its own once it is inside a framework's shutdown path.
+- `QUIPU_HOOK_DRY_RUN=1` (or `--dry-run`) prints the exact prompt and writes nothing — the way to check
+  the hook without spending tokens.
+- A pass that completes but proposes nothing exits 0 and says so on stderr. That is a legitimate
+  outcome for a thin transcript, and it must stay visible: a hook that runs for a week and writes
+  nothing looks exactly like this.
+
+Measured: a 3 KB transcript against the local `qwen3.6-35b-a3b` took 104 s and proposed nothing (exit 0
+with the warning); a 14 KB transcript hit the endpoint's own 120 s read timeout and the hook exited 1
+with `reflection failed: TimeoutError: timed out` and no partial entry. Chunking a long transcript is
+#2, not something the hook should guess at.
+
 ## Exporting
 
 | command | when you want it | what each record carries |

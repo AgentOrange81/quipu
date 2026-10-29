@@ -13,6 +13,7 @@ from . import config as config_mod
 from . import embed as embed_mod
 from . import export as export_mod
 from . import graph as graph_mod
+from . import hook as hook_mod
 from . import index as index_mod
 from . import promote as promote_mod
 from . import repair as repair_mod
@@ -507,6 +508,37 @@ def cmd_embed(args) -> int:
     return 0
 
 
+def cmd_hook(args) -> int:
+    """The session-end adapter: one reflection pass, no partial writes, non-zero on every failure (#3).
+
+    A hook that exits 0 after doing nothing is the failure this project exists because of, so the
+    only success path is a completed pass; `QUIPU_HOOK_DRY_RUN=1` prints the prompt and writes nothing.
+    """
+    cfg = _cfg(args)
+    dry = args.dry_run or hook_mod.dry_run_requested()
+    try:
+        result = hook_mod.run(cfg, args.transcript, _provider(args, cfg),
+                              agent=args.agent, project=args.project, session=args.session,
+                              timeout=args.timeout, dry_run=dry)
+    except hook_mod.HookError as exc:
+        print(f"hook failed: {exc}", file=sys.stderr)
+        return 1
+    except Exception as exc:  # a hook must never die with a traceback and no exit code
+        print(f"hook failed: {type(exc).__name__}: {exc}", file=sys.stderr)
+        return 1
+    if dry:
+        print(result.prompt)
+        return 0
+    print(result.line())
+    if result.proposed == 0:
+        # a completed pass that extracted nothing is a legitimate outcome (a thin transcript) but it
+        # must not be INVISIBLE: a hook that runs for a week and writes nothing looks exactly like
+        # this, and that is the failure this project exists because of
+        print("warning: the reflection pass proposed no entries — the transcript may be too thin "
+              "or the model may be refusing; nothing was written", file=sys.stderr)
+    return 0
+
+
 def cmd_mcp(args) -> int:
     """Serve the vault over MCP on stdio — tools instead of a subprocess per query."""
     from .mcp import serve
@@ -572,6 +604,19 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--model", default="")
     s.add_argument("--fake", help="JSON responses file (no LLM call)")
     s.add_argument("--dry-run", action="store_true")
+
+    s = add("hook", "session-end adapter: reflect a transcript, fail loudly", cmd_hook)
+    s.add_argument("--transcript", default="-",
+                   help="session file (Hermes JSONL or markdown); '-' reads stdin")
+    s.add_argument("--agent", default="")
+    s.add_argument("--project", default="")
+    s.add_argument("--session", default="")
+    s.add_argument("--model", default="")
+    s.add_argument("--fake", help="JSON responses file (no LLM call)")
+    s.add_argument("--timeout", type=float, default=hook_mod.DEFAULT_TIMEOUT,
+                   help=f"abort the reflection after N seconds (default {hook_mod.DEFAULT_TIMEOUT:g})")
+    s.add_argument("--dry-run", action="store_true",
+                   help="print the prompt and write nothing (also QUIPU_HOOK_DRY_RUN=1)")
 
     s = add("search", "full-text search", cmd_search)
     s.add_argument("query")
