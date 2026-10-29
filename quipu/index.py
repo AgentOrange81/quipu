@@ -6,7 +6,14 @@ from pathlib import Path
 
 from .store import Entry, iter_entries
 
-SCHEMA = """
+#: The schema version of this db, carried in `PRAGMA user_version`. A db written by an older
+#: quipu has a lower number. The index is derived from the markdown, so an old db is a rebuild
+#: away from being current - never a vault that cannot be opened (#23).
+SCHEMA_VERSION = 2
+
+#: TABLES FIRST, and no index in here: an index on a column that the migration has not added yet
+#: is the crash that made every command die on a vault written before the identity key.
+TABLES_SCHEMA = """
 PRAGMA journal_mode=WAL;
 
 CREATE TABLE IF NOT EXISTS entries(
@@ -21,18 +28,42 @@ CREATE VIRTUAL TABLE IF NOT EXISTS entries_fts USING fts5(
 CREATE TABLE IF NOT EXISTS entities(
   id INTEGER PRIMARY KEY, name TEXT NOT NULL UNIQUE, kind TEXT DEFAULT 'thing',
   aliases TEXT DEFAULT '[]', created TEXT, key TEXT);
-CREATE INDEX IF NOT EXISTS entities_key ON entities(key);
 
 CREATE TABLE IF NOT EXISTS edges(
   id INTEGER PRIMARY KEY, src TEXT NOT NULL, predicate TEXT NOT NULL, dst TEXT NOT NULL,
   note_id TEXT, confidence REAL DEFAULT 1.0, valid_from TEXT, valid_to TEXT,
   UNIQUE(src, predicate, dst, valid_from));
-CREATE INDEX IF NOT EXISTS edges_src ON edges(src);
-CREATE INDEX IF NOT EXISTS edges_dst ON edges(dst);
-
 CREATE TABLE IF NOT EXISTS events(
   id INTEGER PRIMARY KEY, at TEXT NOT NULL, kind TEXT NOT NULL, detail TEXT);
 """
+
+#: INDEXES LAST, once every column they name exists.
+INDEXES_SCHEMA = """
+CREATE INDEX IF NOT EXISTS entities_key ON entities(key);
+CREATE INDEX IF NOT EXISTS edges_src ON edges(src);
+CREATE INDEX IF NOT EXISTS edges_dst ON edges(dst);
+"""
+
+#: The old name, kept so anything that reached for it still finds the tables.
+SCHEMA = TABLES_SCHEMA
+
+
+def _migrate(c: sqlite3.Connection) -> None:
+    """Add the columns an older db is missing, before any index needs them.
+
+    A db written before the identity key existed has no `key` column, and `CREATE INDEX
+    entities_key` on it raises `no such column: key`. The old `connect()` ran the whole schema
+    script - indexes included - and only then asked whether the column existed, so the migration
+    was unreachable exactly when it was needed and every command died on an old vault (#23).
+    The order is now: tables, then columns, then indexes. The keys are backfilled here, so the
+    db is usable the moment `connect()` returns.
+    """
+    cols = {r[1] for r in c.execute("PRAGMA table_info(entities)")}
+    if "key" not in cols:
+        c.execute("ALTER TABLE entities ADD COLUMN key TEXT")
+    from .graph import identity  # local import: graph imports index, so a top-level one cycles
+    for row in c.execute("SELECT id, name FROM entities WHERE key IS NULL OR key = ''").fetchall():
+        c.execute("UPDATE entities SET key = ? WHERE id = ?", (identity(row["name"]), row["id"]))
 
 
 def connect(db: str | Path) -> sqlite3.Connection:
@@ -40,10 +71,11 @@ def connect(db: str | Path) -> sqlite3.Connection:
     db.parent.mkdir(parents=True, exist_ok=True)
     c = sqlite3.connect(db)
     c.row_factory = sqlite3.Row
-    c.executescript(SCHEMA)
-    # a db written before the identity key existed: add the column; ensure_entity backfills it
-    if "key" not in {r[1] for r in c.execute("PRAGMA table_info(entities)")}:
-        c.execute("ALTER TABLE entities ADD COLUMN key TEXT")
+    c.executescript(TABLES_SCHEMA)
+    _migrate(c)
+    c.executescript(INDEXES_SCHEMA)
+    c.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
+    c.commit()
     return c
 
 

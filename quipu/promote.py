@@ -18,7 +18,7 @@ from . import KINDS
 from .config import Config
 from .graph import add_edge, ensure_entity
 from .index import connect
-from .store import Entry, write_entry
+from .store import Entry, format_edge_spec, write_entry
 
 PROMPT_PATH = Path(__file__).resolve().parent.parent / "prompts" / "promote.md"
 
@@ -146,11 +146,14 @@ def apply(proposals: list[Proposal], cfg: Config, agent: str = "", project: str 
     written: list[Entry] = []
     for p in proposals:
         promoted = p.importance >= cfg.promote_threshold and bool(p.evidence)
+        # the entry that asserted an edge records it, so the graph survives a lost db (#24).
+        # A raw proposal never enters the graph, so it carries no edges either.
+        specs = [format_edge_spec(src, predicate, dst) for src, predicate, dst in p.edges] if promoted else []
         e = Entry(
             kind=p.kind, state="promoted" if promoted else "raw", agent=agent, project=project,
             session=session, confidence=p.confidence, importance=p.importance,
             source=source or "reflect", ask=p.ask, summary=p.summary, evidence=p.evidence,
-            supersedes=p.supersedes, tags=p.tags, body=p.body,
+            supersedes=p.supersedes, tags=p.tags, edges=specs, body=p.body,
         )
         write_entry(cfg.root, e)
         written.append(e)
@@ -163,7 +166,8 @@ def apply(proposals: list[Proposal], cfg: Config, agent: str = "", project: str 
                 c.close()
             for src, predicate, dst in p.edges:
                 try:
-                    add_edge(cfg, src, predicate, dst, note_id=e.id)
+                    # the entry's `created` is the window's start, so a rebuild reproduces it
+                    add_edge(cfg, src, predicate, dst, note_id=e.id, at=e.created)
                 except ValueError:
                     continue  # predicate outside the closed vocabulary: skip, don't poison the graph
     return written

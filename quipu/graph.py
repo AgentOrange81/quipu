@@ -14,7 +14,15 @@ import unicodedata
 
 from .config import Config
 from .index import connect
-from .store import now_iso
+from .store import (
+    Entry,
+    find_entry,
+    format_edge_spec,
+    iter_entries,
+    now_iso,
+    parse_edge_spec,
+    read_entry,
+)
 
 
 def slug(name: str) -> str:
@@ -106,7 +114,85 @@ def resolve(cfg: Config, name: str) -> str:
     return row[0] if row else display_name(name)
 
 
-def _check_predicate(cfg: Config, predicate: str, allow_new_predicate: bool = False) -> None:
+# --- the graph lives in the markdown (#24) ------------------------------------------------
+#
+# `rm .quipu/index.db` must lose nothing: the notes are the truth, and the db is derived from
+# them. So an asserted edge is written into the entry that asserted it, and a closed window is
+# written into that same entry. Without this the temporal graph - the most valuable record in the
+# system - existed in exactly one place, and that place was the file the design calls disposable.
+
+
+def _update_entry(cfg: Config, note_id: str, mutate) -> bool:
+    """Apply `mutate` to the entry with this id and write it back to the same file."""
+    path = find_entry(cfg.root, note_id) if note_id else None
+    if path is None:
+        return False
+    e = read_entry(path)
+    if not mutate(e):
+        return False
+    path.write_text(e.to_markdown(), encoding="utf-8")
+    return True
+
+
+def record_edge(cfg: Config, note_id: str, spec: str) -> bool:
+    """Write an asserted edge into the entry that asserted it. Idempotent."""
+
+    def mutate(e: Entry) -> bool:
+        if spec in e.edges:
+            return False
+        e.edges = [*e.edges, spec]
+        return True
+
+    return _update_entry(cfg, note_id, mutate)
+
+
+def record_closure(cfg: Config, note_id: str, src: str, predicate: str, dst: str, at: str,
+                    replacement: str = "") -> bool:
+    """Write a closed window into the entry that asserted the edge. Idempotent.
+
+    `replacement` is the spec of the edge that took over. A contradiction closes one window and
+    opens another at the same instant, so the closure has to say which edge starts when it does:
+    without that, a replay dates the replacement to the entry's creation and the rebuilt timeline
+    is not the timeline that was there before.
+    """
+    spec = format_edge_spec(src, predicate, dst)
+
+    def mutate(e: Entry) -> bool:
+        for i, c in enumerate(e.edge_closures):
+            if c.get("spec") == spec and c.get("at") == at:
+                if replacement and not c.get("replacement"):
+                    e.edge_closures = [*e.edge_closures[:i], {**c, "replacement": replacement},
+                                       *e.edge_closures[i + 1:]]
+                    return True
+                return False
+        record = {"spec": spec, "at": at}
+        if replacement:
+            record["replacement"] = replacement
+        e.edge_closures = [*e.edge_closures, record]
+        return True
+
+    return _update_entry(cfg, note_id, mutate)
+
+
+def entry_records_edge(entry: Entry, spec: str) -> bool:
+    """Does the entry already record this edge? Compare DISPLAY forms: the db stores displays,
+    so that is what a spec resolves to."""
+    try:
+        src, predicate, dst = parse_edge_spec(spec)
+    except ValueError:
+        return False
+    for raw in entry.edges:
+        try:
+            s2, p2, d2 = parse_edge_spec(raw)
+        except ValueError:
+            continue
+        if (p2 == predicate and display_name(s2) == display_name(src)
+                and display_name(d2) == display_name(dst)):
+            return True
+    return False
+
+
+def check_predicate(cfg: Config, predicate: str, allow_new_predicate: bool = False) -> None:
     """A predicate outside the closed vocabulary is a hard error — unless it is let through."""
     if predicate not in cfg.predicates and not allow_new_predicate:
         raise ValueError(
@@ -116,8 +202,8 @@ def _check_predicate(cfg: Config, predicate: str, allow_new_predicate: bool = Fa
 
 
 def _assert_edge(c: sqlite3.Connection, src: str, predicate: str, dst: str, note_id: str,
-                 confidence: float, at: str) -> int:
-    """Open an edge on an open connection and return its id (no commit of its own)."""
+                 confidence: float, at: str) -> tuple[int, bool]:
+    """Open an edge on an open connection and return (id, created). No commit of its own."""
     src = ensure_entity(c, src)   # returns the display name for this identity
     dst = ensure_entity(c, dst)
     # Idempotent by design, in two shapes. Same second: the UNIQUE constraint below. Later
@@ -129,7 +215,7 @@ def _assert_edge(c: sqlite3.Connection, src: str, predicate: str, dst: str, note
         (src, predicate, dst),
     ).fetchone()
     if live:
-        return live[0]
+        return live[0], False
     c.execute(
         "INSERT INTO edges(src, predicate, dst, note_id, confidence, valid_from, valid_to) "
         "VALUES(?,?,?,?,?,?,NULL) ON CONFLICT(src, predicate, dst, valid_from) DO NOTHING",
@@ -142,25 +228,49 @@ def _assert_edge(c: sqlite3.Connection, src: str, predicate: str, dst: str, note
     c.execute("INSERT INTO events(at, kind, detail) VALUES(?,?,?)",
               (at, "assert", json.dumps({"edge": eid, "src": src, "pred": predicate, "dst": dst,
                                         "note": note_id}, ensure_ascii=False)))
-    return eid
+    created = c.execute(
+        "SELECT count(*) FROM edges WHERE src = ? AND predicate = ? AND dst = ? AND valid_from = ?",
+        (src, predicate, dst, at),
+    ).fetchone()[0] == 1
+    return eid, created
+
+
+def _entry_created(cfg: Config, note_id: str) -> str:
+    """The created instant of the entry that carries an edge — the only timestamp the markdown has.
+
+    An edge asserted by an entry starts when that entry was created. The markdown is the truth and
+    the db is derived from it, so the start of a window has to be readable from the notes: an
+    edge dated to the moment it was asserted would be dated differently by every rebuild.
+    """
+    if not note_id:
+        return ""
+    path = find_entry(cfg.root, note_id)
+    if path is None:
+        return ""
+    return read_entry(path).created or ""
 
 
 def add_edge(cfg: Config, src: str, predicate: str, dst: str, note_id: str = "",
              confidence: float = 1.0, at: str | None = None,
-             allow_new_predicate: bool = False) -> int:
+             allow_new_predicate: bool = False, record: bool = True) -> int:
     """Assert src -predicate-> dst. Returns the new edge id.
 
     Raises ValueError for a predicate outside the closed vocabulary unless allow_new_predicate —
     an open predicate space is how a graph rots into 400 spellings of "uses".
+
+    The spec is written into the entry that asserted it, so the graph survives the loss of the db
+    (#24). `record=False` is for the rebuild, which replays what the markdown already says.
     """
-    _check_predicate(cfg, predicate, allow_new_predicate)
-    at = at or now_iso()
+    check_predicate(cfg, predicate, allow_new_predicate)
+    at = at or _entry_created(cfg, note_id) or now_iso()
     c = connect(cfg.db_path)
     try:
         with c:
-            eid = _assert_edge(c, src, predicate, dst, note_id, confidence, at)
+            eid, _created = _assert_edge(c, src, predicate, dst, note_id, confidence, at)
     finally:
         c.close()
+    if record and note_id:
+        record_edge(cfg, note_id, format_edge_spec(src, predicate, dst))
     return eid
 
 
@@ -176,22 +286,41 @@ def contradict(cfg: Config, old_edge_id: int, src: str, predicate: str, dst: str
     names nothing) must leave the old belief live. Closing first and validating after left the
     graph with a closed belief and no live edge at all.
     """
-    _check_predicate(cfg, predicate)
+    check_predicate(cfg, predicate)
     if not (dst or "").strip():
         raise ValueError("contradict needs a destination to believe in")
     at = at or now_iso()
     c = connect(cfg.db_path)
     try:
         with c:
-            row = c.execute("SELECT id FROM edges WHERE id = ?", (old_edge_id,)).fetchone()
+            row = c.execute("SELECT id, src, predicate, dst, note_id FROM edges WHERE id = ?",
+                            (old_edge_id,)).fetchone()
             if row is None:
                 raise ValueError(f"no edge {old_edge_id}")
+            # The replacement is carried by an entry, or a rebuild drops it: an edge that exists
+            # only in the db is a live belief that vanishes, which is worse than one that comes
+            # back. With no note given, the entry that owned the closed edge carries it, so that
+            # entry's frontmatter ends up with the new spec in `edges:` AND the closure in
+            # `edge_closures:` - a replay then reproduces both windows. An explicit --note wins.
+            carrier = note_id or (row["note_id"] or "")
             c.execute("UPDATE edges SET valid_to = ? WHERE id = ? AND valid_to IS NULL", (at, old_edge_id))
             c.execute("INSERT INTO events(at, kind, detail) VALUES(?,?,?)",
                       (at, "invalidate", json.dumps({"edge": old_edge_id})))
-            eid = _assert_edge(c, src, predicate, dst, note_id, confidence, at)
+            eid, created = _assert_edge(c, src, predicate, dst, carrier, confidence, at)
     finally:
         c.close()
+    # the closed window belongs to the entry that asserted the old edge; the new one belongs to
+    # the entry that carries the correction. Both go into the markdown, or a rebuild would
+    # resurrect the closed belief and lose the correction.
+    #
+    # If the assertion reused an edge that was already live, no replacement was created: that
+    # edge keeps its own window, and naming it as the replacement would make a replay re-date it.
+    replacement = format_edge_spec(src, predicate, dst) if created else ""
+    if row["note_id"]:
+        record_closure(cfg, row["note_id"], row["src"], row["predicate"], row["dst"], at,
+                       replacement=replacement)
+    if carrier and created:
+        record_edge(cfg, carrier, replacement)
     return eid
 
 
@@ -200,6 +329,8 @@ def invalidate(cfg: Config, edge_id: int, at: str | None = None) -> None:
     c = connect(cfg.db_path)
     try:
         with c:
+            row = c.execute("SELECT src, predicate, dst, note_id FROM edges WHERE id = ?",
+                            (edge_id,)).fetchone()
             cur = c.execute("UPDATE edges SET valid_to = ? WHERE id = ? AND valid_to IS NULL",
                             (at, edge_id))
             if cur.rowcount == 0:
@@ -209,6 +340,9 @@ def invalidate(cfg: Config, edge_id: int, at: str | None = None) -> None:
                       (at, "invalidate", json.dumps({"edge": edge_id}, ensure_ascii=False)))
     finally:
         c.close()
+    # a closed window that is not written down is a belief that comes back on the next rebuild
+    if row is not None and row["note_id"]:
+        record_closure(cfg, row["note_id"], row["src"], row["predicate"], row["dst"], at)
 
 
 def timeline(cfg: Config, entity: str, at: str | None = None) -> list[dict]:
@@ -277,3 +411,136 @@ def materialize(cfg: Config) -> int:
         count += 1
     c.close()
     return count
+
+
+def _close_spec(cfg: Config, spec: str, at: str) -> bool:
+    """Close the live edge this spec names. Exact display match first, identity match second."""
+    try:
+        src, predicate, dst = parse_edge_spec(spec)
+    except ValueError:
+        return False
+    c = connect(cfg.db_path)
+    try:
+        rows = c.execute("SELECT id, src, dst FROM edges WHERE predicate = ? AND valid_to IS NULL",
+                         (predicate,)).fetchall()
+        target = None
+        for r in rows:
+            if r["src"] == src and r["dst"] == dst:
+                target = r["id"]
+                break
+        if target is None:
+            for r in rows:
+                if identity(r["src"]) == identity(src) and identity(r["dst"]) == identity(dst):
+                    target = r["id"]
+                    break
+        if target is None:
+            return False
+        with c:
+            c.execute("UPDATE edges SET valid_to = ? WHERE id = ? AND valid_to IS NULL", (at, target))
+            c.execute("INSERT INTO events(at, kind, detail) VALUES(?,?,?)",
+                      (at, "invalidate", json.dumps({"edge": target}, ensure_ascii=False)))
+        return True
+    finally:
+        c.close()
+
+
+def rebuild(cfg: Config) -> dict:
+    """Fold the graph into the markdown and rebuild the graph from it.
+
+    The db is derived: whatever the entries say is what the graph becomes. Edges that exist only
+    in the db are written into the entry that asserted them first, so a rebuild neither loses a
+    belief nor resurrects a closed one. The entry's `created` is the window's start, so a rebuilt
+    timeline is the timeline that was there before - not a fresh set of "now".
+
+    Returns what happened: how many edges were asserted, how many windows were closed, how many
+    db-only edges had no entry to live in.
+    """
+    entries = {e.id: e for _p, e in iter_entries(cfg.root)}
+    c = connect(cfg.db_path)
+    try:
+        rows = [dict(r) for r in c.execute("SELECT * FROM edges ORDER BY id").fetchall()]
+    finally:
+        c.close()
+
+    orphans = 0
+    folded = 0
+    # Which live edge replaced which closed one? The db knows the windows: a window that closed at
+    # T and another of the same src+predicate that opened at T are the same correction. That link
+    # is what lets a replay date the replacement to the moment the old belief died.
+    opened_at: dict[tuple[str, str, str], dict] = {}
+    for row in rows:
+        if not row.get("valid_to"):
+            opened_at.setdefault((row["src"], row["predicate"], row["valid_from"]), row)
+    for row in rows:
+        note_id = row.get("note_id") or ""
+        entry = entries.get(note_id)
+        if entry is None:
+            # asserted with no entry behind it: there is nowhere in the markdown to put it
+            orphans += 1
+            continue
+        spec = format_edge_spec(row["src"], row["predicate"], row["dst"])
+        if not entry_records_edge(entry, spec):
+            record_edge(cfg, note_id, spec)
+            folded += 1
+        if row["valid_to"]:
+            replacement = ""
+            cand = opened_at.get((row["src"], row["predicate"], row["valid_to"]))
+            if cand is not None:
+                replacement = format_edge_spec(cand["src"], cand["predicate"], cand["dst"])
+            record_closure(cfg, note_id, row["src"], row["predicate"], row["dst"], row["valid_to"],
+                           replacement=replacement)
+
+    c = connect(cfg.db_path)
+    try:
+        with c:
+            c.execute("DELETE FROM edges")
+            c.execute("DELETE FROM entities")
+            c.execute("DELETE FROM events")
+    finally:
+        c.close()
+
+    # A closure that names a replacement says the replacement was asserted at the instant the old
+    # window closed. Date it there - not at the entry's creation - or the replayed timeline is a
+    # different timeline.
+    replacement_start: dict[tuple[str, str, str], str] = {}
+    for e in entries.values():
+        for closure in e.edge_closures:
+            rep = closure.get("replacement")
+            if not rep:
+                continue
+            try:
+                s, p, d = parse_edge_spec(rep)
+            except ValueError:
+                continue
+            replacement_start[(p, display_name(s), display_name(d))] = closure.get("at", "")
+
+    # asserted in the order the windows open, so the edge ids come out the same as they did. A
+    # replacement always follows the edge it replaced: they can share a second, and the original
+    # order was old-then-new.
+    plan = []
+    for e in sorted(entries.values(), key=lambda e: (e.created, e.id)):
+        for spec in e.edges:
+            try:
+                src, predicate, dst = parse_edge_spec(spec)
+            except ValueError:
+                continue
+            key = (predicate, display_name(src), display_name(dst))
+            at = replacement_start.get(key) or e.created
+            plan.append((at, key in replacement_start, e.created, e.id, src, predicate, dst, e.id))
+    plan.sort(key=lambda p: (p[0], p[1], p[2], p[3]))
+
+    asserted = 0
+    for at, _is_replacement, _created, _eid, src, predicate, dst, note_id in plan:
+        try:
+            add_edge(cfg, src, predicate, dst, note_id=note_id, at=at,
+                     allow_new_predicate=True, record=False)
+            asserted += 1
+        except ValueError:
+            continue
+
+    closed = 0
+    for e in entries.values():
+        for closure in e.edge_closures:
+            if _close_spec(cfg, closure.get("spec", ""), closure.get("at", "")):
+                closed += 1
+    return {"edges": asserted, "closed": closed, "folded": folded, "orphans": orphans}
