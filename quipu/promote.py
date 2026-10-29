@@ -16,7 +16,7 @@ from pathlib import Path
 
 from . import KINDS
 from .config import Config
-from .graph import add_edge, ensure_entity
+from .graph import add_edge, close_superseded, ensure_entity
 from .index import connect
 from .store import Entry, format_edge_spec, write_entry
 
@@ -170,6 +170,10 @@ def apply(proposals: list[Proposal], cfg: Config, agent: str = "", project: str 
                     add_edge(cfg, src, predicate, dst, note_id=e.id, at=e.created)
                 except ValueError:
                     continue  # predicate outside the closed vocabulary: skip, don't poison the graph
+        # a correction proposed by the reflection pass closes the belief it corrects (#20), the same
+        # way `quipu write --supersedes` does; an edge the new entry restates is left live
+        if e.supersedes:
+            close_superseded(cfg, e.supersedes, e)
     return written
 
 

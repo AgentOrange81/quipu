@@ -84,9 +84,11 @@ files**: not one imported note carries an `edges:` assertion, so the graph is ex
 by hand. Imported fabric entries have no `ask` field, so they yield nothing. Recall, not training
 data; the SFT set starts from entries written or reflected after the migration.
 
-**#20 — superseding a fact leaves the old graph edge live.** Verified: after `write --supersedes`,
-`timeline` shows *both* edges `→ now`. Close the old one by hand with `quipu invalidate` or
-`quipu contradict`.
+**#20 — superseding a fact left the old graph edge live.** Verified at this tag: after
+`write --supersedes`, `timeline` shows *both* edges `→ now`. **Fixed after the tag** (see CHANGELOG
+Unreleased): the write path closes the superseded entry's live edges, records the closure in the
+markdown, and `quipu audit` reports any superseded entry whose edge is still live — the shape a vault
+written by this version is in.
 
 **#23 — a vault written before the identity fix cannot be opened at all.** Reproduced on a synthetic
 old schema: `sqlite3.OperationalError: no such column: key` from `quipu/index.py:43` — the

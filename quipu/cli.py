@@ -104,6 +104,12 @@ def cmd_write(args) -> int:
         # the write failed: the index is not refreshed, so the entry stays unindexed until a
         # reindex runs. The markdown is the truth; the index is disposable.
         return 2
+    # the graph follows --supersedes (#20): the old belief's window closes at the instant the
+    # correction was written, and the closure is recorded in the markdown so a rebuild replays it.
+    closed = graph_mod.close_superseded(cfg, e.supersedes, e) if e.supersedes else []
+    for row in closed:
+        print(f"closed edge {row['edge']} {row['spec']} (superseded {row['superseded']})",
+              file=sys.stderr)
     index_mod.reindex(cfg.root, cfg.db_path)
     graph_mod.materialize(cfg)
     print(p)
@@ -313,9 +319,17 @@ def cmd_audit(args) -> int:
     # the graph must live in the markdown (#24): an edge no entry records is data that
     # `rm .quipu/index.db` would take with it.
     c = index_mod.connect(cfg.db_path)
-    rows = c.execute("SELECT id, src, predicate, dst, note_id FROM edges").fetchall()
+    rows = c.execute("SELECT id, src, predicate, dst, note_id, valid_to FROM edges").fetchall()
     version = c.execute("PRAGMA user_version").fetchone()[0]
     c.close()
+    # a superseded entry whose belief is still live is the exact failure #20 produced: two live
+    # windows for one fact, and the stale claim looks as current as the correction. The write path
+    # closes it now; this line is what says so out loud when a vault was written by an older one.
+    live_notes = {r["note_id"] for r in rows if r["valid_to"] is None and r["note_id"]}
+    for e in entries.values():
+        for old in e.supersedes:
+            if old in live_notes:
+                problems.append(f"{e.id}: supersedes {old} but its edge is still live")
     unrecorded = []
     for r in rows:
         entry = entries.get(r["note_id"] or "")

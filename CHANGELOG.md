@@ -4,6 +4,16 @@ Notable changes, newest first. Versions follow `0.x` while the format and the CL
 anything that changes a vault's on-disk shape gets an explicit note, because markdown is the source of
 truth and a migration is the user's data.
 
+## Unreleased
+
+### Fixed
+
+- `write --supersedes` now closes the live graph edges of the entry it corrects, dated at the moment the
+  correction was written, and records the closure in the markdown so a rebuild reproduces the same
+  history (#20). An edge the correction restates is left live — restating a fact changes its carrier, not
+  the belief. `quipu audit` reports any superseded entry whose edge is still live, which is what a vault
+  written by an older version looks like.
+
 ## 0.2.0-alpha — 2026-10-29
 
 Tagged `v0.2.0-alpha`; package version `0.2.0a1`. This is the first version meant to be *used*: a live
@@ -52,8 +62,8 @@ gates every change, and a benchmark that reports failure honestly.
   transcript (#31).
 - A migrated pre-`key` database backfills the identity key but not the display name, so `timeline` reports an
   empty graph instead of crashing (#37).
-- `write --supersedes` does not close the graph edge it replaces; correct the graph explicitly until #20
-  lands.
+- `write --supersedes` did not close the graph edge it replaced (#20) — fixed in Unreleased, so a vault
+  written by this version may still carry a superseded claim's edge as live; `quipu audit` now names them.
 - The graph is only as populated as the `--edge` assertions written — the imported corpus carried none.
 - Imported history contributes recall, not training data, until the `ask` backfill lands (#27).
 

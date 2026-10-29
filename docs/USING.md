@@ -106,11 +106,18 @@ elided):
 Both claims, and the evidence that decided it in `meta.reason`. That is the signal the project
 exists to produce: the memory changed its mind, so it already knows which answer was better.
 
-**The graph does not follow `--supersedes` automatically.** Writing the correction asserts the new
-edge and leaves the old one live — both then show `→ now` in `quipu timeline`. Close the old one
-yourself: `quipu invalidate <edge-id>` closes its window, `quipu contradict <edge-id> src pred dst`
-closes it and asserts the replacement. Edges are never deleted; the closed row keeps its window
-and `quipu export graph` marks it `"live": false`.
+**The graph follows `--supersedes`.** Writing the correction closes the live edges the superseded
+entry asserted, dated at the instant the correction was written, and the closure is recorded in the
+markdown — so `quipu timeline` shows one live window (`→ now`) for one fact, and
+`rm .quipu/index.db` + `quipu reindex` reproduces the same history instead of resurrecting the old
+belief. An edge the correction restates itself is left open: restating a fact under a new entry
+corrects the carrier, not the belief.
+
+Two things stay in your hands. `quipu invalidate <edge-id>` closes a single window you simply want
+gone, and `quipu contradict <edge-id> src pred dst` closes it and asserts a replacement in one
+transaction. Edges are never deleted; the closed row keeps its window and `quipu export graph` marks
+it `"live": false`. `quipu audit` reports any superseded entry whose edge is still live, which is
+the shape a vault written by an older quipu is in.
 
 ## Exporting
 

@@ -324,6 +324,76 @@ def contradict(cfg: Config, old_edge_id: int, src: str, predicate: str, dst: str
     return eid
 
 
+def _asserted_triples(entry: Entry) -> set[tuple[str, str, str]]:
+    """The (predicate, display src, display dst) triples an entry asserts. Bad specs are ignored."""
+    out: set[tuple[str, str, str]] = set()
+    for spec in entry.edges:
+        try:
+            src, predicate, dst = parse_edge_spec(spec)
+        except ValueError:
+            continue
+        out.add((predicate, display_name(src), display_name(dst)))
+    return out
+
+
+def close_superseded(cfg: Config, old_ids, new_entry: Entry, at: str | None = None) -> list[dict]:
+    """Close the live edges of every entry this one supersedes (#20).
+
+    `--supersedes` records the preference pair but used to leave the old belief's window open, so
+    `timeline` and `export graph` showed two live windows for one fact and the stale claim was
+    indistinguishable from the current one. Closing is deliberate, dated, and written into the
+    markdown: the closure goes into the entry that asserted the edge (`record_closure`), so
+    `rm .quipu/index.db` + `reindex` reproduces the closed window instead of resurrecting it.
+
+    An edge the new entry asserts ITSELF is left open on purpose. `_assert_edge` is idempotent by
+    (src, predicate, dst), so re-asserting a live triple reuses that edge; closing it here would
+    leave the vault with the fact closed and nothing live — a rebuild that loses a belief. Superseding
+    an entry while restating its edge means the belief continues, and only its carrier changed.
+
+    Returns the windows closed, as dicts, so a caller can report them.
+    """
+    at = at or new_entry.created or now_iso()
+    keep = _asserted_triples(new_entry)
+    closed: list[dict] = []
+    for old_id in dict.fromkeys(str(o) for o in (old_ids or []) if str(o).strip()):
+        c = connect(cfg.db_path)
+        try:
+            rows = [dict(r) for r in c.execute(
+                "SELECT id, src, predicate, dst, valid_from FROM edges "
+                "WHERE note_id = ? AND valid_to IS NULL ORDER BY id", (old_id,)).fetchall()]
+        finally:
+            c.close()
+        for row in rows:
+            triple = (row["predicate"], display_name(row["src"]), display_name(row["dst"]))
+            if triple in keep:
+                continue
+            if (row["valid_from"] or "") > at:
+                # a window cannot close before it opens (a hand-written `created` in the future);
+                # leave it rather than write a negative window into the history
+                continue
+            c = connect(cfg.db_path)
+            try:
+                with c:
+                    cur = c.execute("UPDATE edges SET valid_to = ? WHERE id = ? AND valid_to IS NULL",
+                                    (at, row["id"]))
+                    if cur.rowcount:
+                        c.execute("INSERT INTO events(at, kind, detail) VALUES(?,?,?)",
+                                  (at, "invalidate",
+                                   json.dumps({"edge": row["id"]}, ensure_ascii=False)))
+                changed = cur.rowcount
+            finally:
+                c.close()
+            if not changed:
+                continue
+            # the closed window belongs to the entry that asserted the edge; without this line the
+            # rebuild would resurrect the superseded belief
+            record_closure(cfg, old_id, row["src"], row["predicate"], row["dst"], at)
+            closed.append({"edge": row["id"], "spec": format_edge_spec(row["src"], row["predicate"],
+                                                                      row["dst"]),
+                           "superseded": old_id, "at": at})
+    return closed
+
+
 def invalidate(cfg: Config, edge_id: int, at: str | None = None) -> None:
     at = at or now_iso()
     c = connect(cfg.db_path)
