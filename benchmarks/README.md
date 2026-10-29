@@ -136,30 +136,57 @@ retriever currently reads the corpus; it does not yet understand the question.
 ## The live vault, which is not a synthetic corpus
 
 `benchmarks/live_queries.py` runs ten hand-judged questions against a COPY of a real vault and
-prints rank 1 for each. It exists because the synthetic corpus is too kind: every cluster shares a
+prints the ranking for each. It exists because the synthetic corpus is too kind: every cluster shares a
 rare marker term with its gold note, so it cannot reproduce the failure that started this — an
-850-note vault where an agent asks a question and gets a pasted transcript as the answer.
+870-note vault where an agent asks a question and gets a pasted transcript as the answer.
 
     cp -a ~/quipu-vault /tmp/livevault
-    .venv/bin/python -m benchmarks.live_queries /tmp/livevault
+    .venv/bin/python -m benchmarks.live_queries /tmp/livevault --json out.json
 
-Measured on the live vault (850 notes, 10 questions, 2026-10-29), rank 1 correct / rank 1 promoted
-/ rows returned for a five-slot ask:
+It reports four columns, and only one of them is an accuracy (#47):
 
-| variant | rank 1 correct | rank 1 promoted |
-|---|---|---|
-| AND only, flat columns (before #31/#43) | 5/10 | 6/10 |
-| AND only, weighted columns | 6/10 | 6/10 |
-| thin AND, flat columns | 6/10 | 4/10 |
-| thin AND, weighted columns (shipped) | 9/10 | 6/10 |
-| thin AND, weighted + raw demoted x0.5 | 8/10 | 9/10 |
+- `rank1_gold` — rank 1 is one of the notes **hand-verified as an answer** to that question. Quote this.
+- `rank1_promoted` — rank 1 survived the promotion gate rather than arriving `raw`/`pruned`.
+- `rank1_subject` — rank 1 merely mentions the subject (one required stem per question). Loose on
+  purpose, and **not** precision: a hardware audit that says the word "gateway" scored for "which model
+  is the gateway default". Trend only.
+- `gold_in_5` — the verified answer is in the top five, even when rank 1 is wrong.
 
-Two things a reader should take from that table. The shipped combination is chosen on the harness
-tie-break, not by the live set: ten hand-judged questions overfit, and a sharper weight set scored
-10/10 here while losing 0.002 MRR on 100 queries. And the last row is the honest near-miss — a
-state-based demotion would put a promoted claim at rank 1 for nine of ten questions, but it costs
-phrase recall on the harness (1.00 -> 0.76) because an exact-phrase answer is sometimes a raw
-capture. Junk summaries belong to #30, not to a multiplier on state.
+Measured 2026-10-29 on a copy of the 870-note live vault (`benchmarks/results/live-2026-10-29.json`).
+The first row calls the shipped `quipu.index.search`; the rest are the harness's own copy of the ranking,
+run to A/B a shape:
+
+| variant | rank 1 gold | rank 1 promoted | rank 1 subject | gold in 5 |
+|---|---|---|---|---|
+| **shipped `quipu.index.search`** | **6/10** | 8/10 | 9/10 | 7/10 |
+| copy: AND only, flat columns | 5/10 | 7/10 | 7/10 | 5/10 |
+| copy: thin AND, flat columns | 5/10 | 6/10 | 8/10 | 6/10 |
+| copy: thin AND, shipped column weights | 6/10 | 8/10 | 9/10 | 7/10 |
+| copy: flat + raw×0.5, pruned×0.1 | 6/10 | 9/10 | 9/10 | 6/10 |
+| copy: shipped + raw×0.5, pruned×0.1 | 6/10 | 9/10 | 9/10 | 7/10 |
+| copy: summary-only (10/1/1/0.2) | 6/10 | 9/10 | 10/10 | 7/10 |
+
+Three things a reader should take from that table.
+
+**6/10, not 9/10.** The earlier table in this file quoted 9/10, and it was measured with the subject
+column. Four of the ten questions are still wrong at rank 1 under the honest metric: a 3900X memory note
+answers a 3960X question, a solana-test-validator capture answers "which GPU should I buy", a launcher-UI
+note answers "how do we deploy a pump.fun token", and a migration plan with no addresses in it answers
+"rig IP addresses". The weights are not the problem — two of those four questions have **no entry in the
+corpus that answers them at all** (`gold_ids` is empty and the row prints `NO VERIFIED ANSWER IN
+CORPUS`). That is a curation gap, and writing two verified entries is cheaper than any scoring change.
+
+**The copy is faithful, or the row means nothing.** The third row reproduces the shipped row exactly
+(6 gold / 8 promoted / 9 subject / 7 in-five), which is the only reason to believe rows below it. A
+variant that disagrees at the baseline is measuring its own implementation — this file used to carry a
+row labelled "shipped weights" that was `10/6/3/1` while the code shipped `10/4/2/0.5`. The weights are
+now read from `quipu.index.COLUMN_WEIGHTS` and pinned by a test.
+
+**Sharpening the weights does not buy answers.** The summary-only row lifts the loose column to 10/10
+and buys exactly zero verified answers (6/10 either way). State demotion lifts promoted-at-rank-1 to
+9/10 and also buys zero. Both are the same trap: the metric that moves is the one that is not precision.
+The shipped combination stays chosen on the harness tie-break, not on the live set — ten hand-judged
+questions overfit, and a sharper weight set once scored 10/10 here while losing 0.002 MRR on 100 queries.
 
 `benchmarks/sweep_retrieval.py` is the other instrument: it installs each variant over the shipped
 `search` and prints every one, so a weighting that fails the measurement gets reverted in public

@@ -22,6 +22,19 @@ truth and a migration is the user's data.
 
 ### Fixed
 
+- **The live-vault benchmark now scores the answer, not the subject** (#47). `rank1_ok` counted rank 1 as
+  correct when its summary merely contained a stem from the question, so a hardware audit that said
+  "gateway" scored for "which model is the gateway default" — and the 9/10 it published was quoted as
+  precision. It is now `rank1_subject` (trend only, never an accuracy), beside `rank1_promoted`,
+  `gold_in_5`, and **`rank1_gold`**: rank 1 is one of the notes hand-verified as an answer to that
+  question. Honest headline on the 870-note vault: **6/10, not 9/10**, and two of the four misses have no
+  entry in the corpus that answers the question at all (`NO VERIFIED ANSWER IN CORPUS`) — a curation gap,
+  not a weight. The row labelled "shipped weights" was also a copy of `10/6/3/1` while the code shipped
+  `10/4/2/0.5`: the top row now calls `quipu.index.search` itself, the weights are read from the package
+  and pinned by a test, and the copy's baseline row must reproduce the shipped row on every column before
+  its variants mean anything. `pytest benchmarks/tests` joins CI, since `testpaths` never reached those
+  tests. Result file: `benchmarks/results/live-2026-10-29.json`.
+
 - **Fabric import mangled single-quoted, wrapped summaries** (#54). Fabric writes summaries as YAML
   single-quoted scalars and wraps long ones; the importer was line-based and only understood `"…"` and
   `[…]`, so those summaries arrived with their opening quote attached *and* truncated at the wrap — 88
