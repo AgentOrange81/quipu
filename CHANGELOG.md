@@ -8,6 +8,15 @@ truth and a migration is the user's data.
 
 ### Added
 
+- **Transcripts are loaded by shape and chunked on turn boundaries** (`quipu reflect --max-chars`, #2).
+  Hermes session JSONL (`role`/`content`, a string or a list of text parts) is rendered as `role: text`;
+  markdown passes through; meta rows and malformed lines are skipped, not fatal. The pass runs per chunk,
+  splitting only at a turn boundary, keeping a single oversized turn **whole** rather than truncating it,
+  and de-duplicating proposals across chunks so one claim stays one entry. `quipu hook` shares the loader
+  and the cap, and its timeout still bounds the whole pass. Measured: 3 KB → 0 proposals in 104 s before
+  this; 14 KB → 4 chunks at `--max-chars 3500` where the single-prompt version had hit the endpoint's own
+  120 s read timeout.
+
 - **`quipu hook`** — the session-end entry point (#3). `quipu hook --transcript <file|-> --agent <a>`
   runs reflect → apply → index in one call and speaks only in exit codes: 0 if the pass completed,
   non-zero with the reason on stderr for a missing or empty transcript, a transport error, an

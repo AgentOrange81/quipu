@@ -138,14 +138,39 @@ def cmd_write(args) -> int:
     return 0
 
 
+def _dedupe_proposals(proposals):
+    """Kept as the CLI's name for the shared rule; the implementation lives in promote (#2)."""
+    return promote_mod.dedupe_proposals(proposals)
+
+
 def cmd_reflect(args) -> int:
+    """A reflection pass over one transcript, chunked on turn boundaries when it is long (#2).
+
+    The transcript is loaded by shape (Hermes JSONL or markdown), split so no message is ever cut in
+    half, and each chunk is reflected separately. Failures are loud and name the endpoint: a pass that
+    reached nothing must not exit 0.
+    """
     cfg = _cfg(args)
-    transcript = Path(args.transcript).read_text(encoding="utf-8") if args.transcript else _read_stdin()
-    if not transcript.strip():
-        print("empty transcript", file=sys.stderr)
+    source = args.transcript if args.transcript else _read_stdin()
+    try:
+        transcript = promote_mod.load_transcript(source)
+    except ValueError as exc:
+        print(str(exc), file=sys.stderr)
         return 2
     existing = [e.summary for _p, e in iter_entries(cfg.root) if e.state == "promoted"]
-    proposals = promote_mod.reflect(transcript, cfg, _provider(args, cfg), existing)
+    chunks = promote_mod.chunk_transcript(transcript, args.max_chars)
+    provider = _provider(args, cfg)
+    proposals = []
+    try:
+        for number, chunk in enumerate(chunks, 1):
+            got = promote_mod.reflect(chunk, cfg, provider, existing)
+            if len(chunks) > 1:
+                print(f"chunk {number}/{len(chunks)}: {len(got)} proposals")
+            proposals.extend(got)
+    except Exception as exc:  # a failed pass is a non-zero exit with the reason, never a traceback
+        print(f"reflect failed at {cfg.llm_base_url}: {type(exc).__name__}: {exc}", file=sys.stderr)
+        return 1
+    proposals = _dedupe_proposals(proposals)
     if args.dry_run:
         print(json.dumps([p.__dict__ for p in proposals], indent=2, ensure_ascii=False))
         return 0
@@ -519,7 +544,7 @@ def cmd_hook(args) -> int:
     try:
         result = hook_mod.run(cfg, args.transcript, _provider(args, cfg),
                               agent=args.agent, project=args.project, session=args.session,
-                              timeout=args.timeout, dry_run=dry)
+                              timeout=args.timeout, dry_run=dry, max_chars=args.max_chars)
     except hook_mod.HookError as exc:
         print(f"hook failed: {exc}", file=sys.stderr)
         return 1
@@ -603,6 +628,9 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--session", default="")
     s.add_argument("--model", default="")
     s.add_argument("--fake", help="JSON responses file (no LLM call)")
+    s.add_argument("--max-chars", type=int, default=24000,
+                   help="split the transcript on turn boundaries at about this size "
+                        "(0 disables chunking; a single longer turn is still kept whole)")
     s.add_argument("--dry-run", action="store_true")
 
     s = add("hook", "session-end adapter: reflect a transcript, fail loudly", cmd_hook)
@@ -615,6 +643,9 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--fake", help="JSON responses file (no LLM call)")
     s.add_argument("--timeout", type=float, default=hook_mod.DEFAULT_TIMEOUT,
                    help=f"abort the reflection after N seconds (default {hook_mod.DEFAULT_TIMEOUT:g})")
+    s.add_argument("--max-chars", type=int, default=24000,
+                   help="split the transcript on turn boundaries at about this size "
+                        "(0 disables chunking; a single longer turn is still kept whole)")
     s.add_argument("--dry-run", action="store_true",
                    help="print the prompt and write nothing (also QUIPU_HOOK_DRY_RUN=1)")
 

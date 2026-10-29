@@ -40,6 +40,7 @@ class HookResult:
     written: list[Entry] = field(default_factory=list)
     prompt: str = ""
     proposed: int = 0
+    chunks: int = 0
     seconds: float = 0.0
 
     @property
@@ -47,8 +48,9 @@ class HookResult:
         return sum(1 for e in self.written if e.state == "promoted")
 
     def line(self) -> str:
+        chunks = f" in {self.chunks} chunks" if self.chunks > 1 else ""
         return (f"{len(self.written)} entries, {self.promoted} promoted, "
-                f"{len(self.written) - self.promoted} raw, {self.seconds:.1f}s")
+                f"{len(self.written) - self.promoted} raw{chunks}, {self.seconds:.1f}s")
 
 
 def read_transcript(source: str | Path, stdin=None) -> str:
@@ -68,18 +70,23 @@ def _existing(cfg) -> list[str]:
     return [e.summary for _p, e in iter_entries(cfg.root) if e.state == "promoted"]
 
 
-def _reflect_bounded(text: str, cfg, provider, timeout: float):
-    """Run the model call on a worker thread so a hung endpoint cannot block session end.
+def _reflect_bounded(chunks: list[str], cfg, provider, timeout: float):
+    """Run every chunk on a worker thread so a hung endpoint cannot block session end.
 
     `urlopen(timeout=...)` covers a dead socket, not a server that accepted the request and then
     stopped talking — and this call sits in a framework's shutdown path, where hanging is the worst
-    outcome available.
+    outcome available. The budget is for the WHOLE pass, not per chunk: three chunks that each take
+    100 s are not a 300 s pass when the framework is waiting on it.
     """
     box: dict = {}
+    existing = _existing(cfg)
 
     def work():
         try:
-            box["proposals"] = promote_mod.reflect(text, cfg, provider, _existing(cfg))
+            proposals = []
+            for chunk in chunks:
+                proposals.extend(promote_mod.reflect(chunk, cfg, provider, existing))
+            box["proposals"] = proposals
         except BaseException as exc:  # noqa: BLE001 - reported, not swallowed
             box["error"] = exc
 
@@ -87,7 +94,8 @@ def _reflect_bounded(text: str, cfg, provider, timeout: float):
     thread.start()
     thread.join(timeout)
     if thread.is_alive():
-        raise HookError(f"reflection timed out after {timeout:g}s (endpoint {cfg.llm_base_url})")
+        raise HookError(f"reflection timed out after {timeout:g}s (endpoint {cfg.llm_base_url}, "
+                        f"{len(chunks)} chunk{'s' if len(chunks) != 1 else ''})")
     if "error" in box:
         exc = box["error"]
         raise HookError(f"reflection failed: {type(exc).__name__}: {exc}") from exc
@@ -96,7 +104,7 @@ def _reflect_bounded(text: str, cfg, provider, timeout: float):
 
 def run(cfg, transcript: str | Path, provider, agent: str = "", project: str = "",
         session: str = "", timeout: float = DEFAULT_TIMEOUT, dry_run: bool = False,
-        stdin=None) -> HookResult:
+        stdin=None, max_chars: int = 24000) -> HookResult:
     started = time.monotonic()
     text = read_transcript(transcript, stdin=stdin)
     if not text.strip():
@@ -106,14 +114,16 @@ def run(cfg, transcript: str | Path, provider, agent: str = "", project: str = "
         return HookResult(prompt=promote_mod.build_prompt(text, cfg, _existing(cfg)),
                           seconds=time.monotonic() - started)
 
-    proposals = _reflect_bounded(text, cfg, provider, timeout)
+    chunks = promote_mod.chunk_transcript(text, max_chars)
+    proposals = promote_mod.dedupe_proposals(_reflect_bounded(chunks, cfg, provider, timeout))
     # nothing is written until the model has answered in full: a transport error above leaves the
     # vault exactly as it was, which is what "no partial entry" means
     written = promote_mod.apply(proposals, cfg, agent=agent, project=project,
                                 session=session, source=str(transcript))
     graph_mod.materialize(cfg)
     index_mod.reindex(cfg.root, cfg.db_path)
-    return HookResult(written=written, proposed=len(proposals), seconds=time.monotonic() - started)
+    return HookResult(written=written, proposed=len(proposals), chunks=len(chunks),
+                      seconds=time.monotonic() - started)
 
 
 def dry_run_requested(env: dict | None = None) -> bool:

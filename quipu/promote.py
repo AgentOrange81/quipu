@@ -22,6 +22,148 @@ from .store import Entry, format_edge_spec, write_entry
 
 PROMPT_PATH = Path(__file__).resolve().parent.parent / "prompts" / "promote.md"
 
+#: The roles a Hermes session row can carry that belong in a transcript. A `tool` row is included
+#: because a tool result usually carries the evidence the reflection pass needs.
+TURN_ROLES = ("user", "assistant", "system", "tool", "human")
+
+#: A line that opens a turn: `role: text`. The loader emits exactly this shape, and the chunker
+#: splits on it, so a chunk boundary is always a turn boundary.
+_TURN_LINE = re.compile(r"^(user|assistant|system|tool|human):\s", re.I)
+
+
+def load_transcript(source: str | Path) -> str:
+    """Read a session file — or a transcript already in hand — into plain `role: text` lines (#2).
+
+    Two shapes arrive in practice and they want different treatment:
+
+    * **Hermes session JSONL** (`.jsonl`, or content that sniffs as one): one JSON object per line with
+      `role` and `content`, where `content` is a string or a list of `{"type": "text", "text": ...}`
+      parts. Rendered as `role: text`, parts of one message joined with a single space.
+    * **Anything else** (markdown, a pasted transcript): passed through untouched, because a human
+      already chose its shape.
+
+    A row that is not a message (`type: meta`), a malformed line, and a message with no text are
+    skipped rather than fatal: a session file with one corrupt line is still a session. An empty or
+    missing file IS fatal — a pass over nothing must not look like a pass.
+    """
+    if isinstance(source, Path):
+        path: Path | None = source
+        text = ""
+    else:
+        raw = str(source)
+        looks_like_a_path = "\n" not in raw and len(raw) < 4096
+        path = Path(raw) if looks_like_a_path else None
+        text = raw if path is None else ""
+    if path is not None:
+        if not path.exists():
+            raise ValueError(f"transcript not found: {path}")
+        try:
+            text = path.read_text(encoding="utf-8", errors="replace")
+        except OSError as exc:
+            raise ValueError(f"cannot read transcript {path}: {exc}") from exc
+    if not text.strip():
+        raise ValueError(f"empty transcript: {path or '<text>'}")
+
+    if not _sniffs_jsonl(text, path):
+        return text
+    lines: list[str] = []
+    for raw_line in text.splitlines():
+        line = raw_line.strip()
+        if not line:
+            continue
+        try:
+            row = json.loads(line)
+        except ValueError:
+            continue  # one corrupt line is not a broken session
+        if not isinstance(row, dict):
+            continue
+        role = str(row.get("role") or "").lower()
+        if role not in TURN_ROLES:
+            continue  # meta/control rows are not conversation
+        content = row.get("content")
+        if isinstance(content, str):
+            parts = [content]
+        elif isinstance(content, list):
+            parts = [p.get("text", "") for p in content
+                     if isinstance(p, dict)
+                     and p.get("type", "text") in ("text", "input_text", "output_text")]
+        else:
+            continue
+        message = re.sub(r"\s+", " ", " ".join(str(p) for p in parts if p)).strip()
+        if message:
+            lines.append(f"{role}: {message}")
+    if not lines:
+        raise ValueError(f"no messages in transcript: {path or '<text>'}")
+    return "\n".join(lines)
+
+
+def _sniffs_jsonl(text: str, path: Path | None) -> bool:
+    """A `.jsonl` name is a promise; without one, the first non-empty line has to be a message row."""
+    if path is not None and path.suffix.lower() in (".jsonl", ".ndjson"):
+        return True
+    for line in text.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        if not line.startswith("{"):
+            return False
+        try:
+            row = json.loads(line)
+        except ValueError:
+            return False
+        return isinstance(row, dict) and "role" in row and "content" in row
+    return False
+
+
+def chunk_transcript(text: str, max_chars: int = 24000) -> list[str]:
+    """Split a transcript on TURN boundaries so no message is ever cut in half (#2).
+
+    A chunk is a whole number of turns, packed greedily up to `max_chars`. One turn longer than the
+    cap is returned **whole** as its own chunk: truncating a message silently is exactly the failure
+    this project exists to stop, so bounding an oversized turn is the caller's explicit decision, not
+    the chunker's quiet one. `max_chars <= 0` disables chunking.
+
+    Markdown without `role:` lines is split on blank lines instead — still a boundary a human drew.
+    Joining the returned chunks with the text's own separator reproduces the input exactly.
+    """
+    if max_chars <= 0:
+        return [text]
+    if len(text) <= max_chars:
+        return [text]
+
+    lines = text.split("\n")
+    blocks: list[list[str]] = []
+    if sum(1 for line in lines if _TURN_LINE.match(line)) >= 2:
+        for line in lines:
+            if not blocks or _TURN_LINE.match(line):
+                blocks.append([line])
+            else:
+                blocks[-1].append(line)   # blank lines and continuations stay with their turn
+    else:
+        for line in lines:                # paragraphs; a blank run closes the block before it
+            if blocks and line.strip() and blocks[-1][-1].strip() == "":
+                blocks.append([line])
+            elif blocks:
+                blocks[-1].append(line)
+            else:
+                blocks.append([line])
+
+    chunks: list[str] = []
+    current: list[list[str]] = []
+    size = 0
+    for block in blocks:
+        block_size = len("\n".join(block))
+        extra = block_size + (1 if current else 0)
+        if current and size + extra > max_chars:
+            chunks.append("\n".join("\n".join(b) for b in current))
+            current, size = [block], block_size
+        else:
+            current.append(block)
+            size += extra
+    if current:
+        chunks.append("\n".join("\n".join(b) for b in current))
+    return [c for c in chunks] or [text]
+
 
 @dataclass
 class Proposal:
@@ -95,7 +237,7 @@ class HttpProvider:
             with urllib.request.urlopen(req, timeout=self.timeout) as r:
                 data = json.loads(r.read())
         except urllib.error.URLError as exc:
-            raise RuntimeError(f"LLM request failed: {exc}") from exc
+            raise RuntimeError(f"LLM request failed: {exc} (endpoint {self.base_url})") from exc
         return data["choices"][0]["message"]["content"]
 
 
@@ -130,6 +272,25 @@ def parse_response(raw: str) -> list[Proposal]:
     if not isinstance(items, list):
         raise ValueError("response has no entries list")
     return [Proposal.from_json(d) for d in items if isinstance(d, dict) and d.get("summary")]
+
+
+def dedupe_proposals(proposals: list) -> list:
+    """Union per-chunk proposals, dropping a summary an earlier chunk already produced.
+
+    Chunking sends neighbouring context to the same model, so one claim can come back twice — and a
+    chunked pass that writes it twice turns a clean corpus into a pile of near-duplicates. The key is
+    the summary with whitespace collapsed and case folded: the reflection pass writes that summary
+    itself, so two spellings of one claim are one claim.
+    """
+    seen: set[str] = set()
+    kept = []
+    for proposal in proposals:
+        key = " ".join(str(proposal.summary).split()).lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        kept.append(proposal)
+    return kept
 
 
 def reflect(transcript: str, cfg: Config, provider, existing: list[str] | None = None) -> list[Proposal]:
