@@ -4,7 +4,11 @@ Notable changes, newest first. Versions follow `0.x` while the format and the CL
 anything that changes a vault's on-disk shape gets an explicit note, because markdown is the source of
 truth and a migration is the user's data.
 
-## Unreleased — target `0.2.0-alpha`
+## 0.2.0-alpha — 2026-10-29
+
+Tagged `v0.2.0-alpha`; package version `0.2.0a1`. This is the first version meant to be *used*: a live
+vault, a binary on PATH, an MCP server an agent can call, CI gating every change, and a benchmark that
+reports failure honestly.
 
 The first version that is meant to be *used*, not just tested: a live vault, a binary on PATH, CI that
 gates every change, and a benchmark that reports failure honestly.
@@ -16,8 +20,11 @@ gates every change, and a benchmark that reports failure honestly.
 - `benchmarks/` — a retrieval harness with its own corpus, ground truth known by construction, and
   per-kind reporting (#21). First numbers: R@5 0.51, R@10 0.62, MRR 0.24; `question`-shaped recall 0.00.
 - `docs/USING.md` (#19), `docs/MEASUREMENTS.md` and the source-level survey in `docs/DESIGN.md` (#12).
+- `quipu mcp` — a dependency-free stdio MCP server exposing `search`, `timeline`, `neighbors`, `write` and
+  `stats` as tools (#9), so an agent recalls as part of its normal work instead of shelling out.
 - A QA suite that encodes defects as strict xfails (#16), and documentation tests that run the documented
-  commands instead of trusting them (#33).
+  commands instead of trusting them (#33), plus a graph-replay suite that fails if `rm index.db` + `reindex`
+  ever stops reproducing the graph (#39).
 - CI on 3.10 / 3.12 / 3.13, required on `main` with `enforce_admins: true` (#13).
 
 ### Fixed
@@ -32,13 +39,22 @@ gates every change, and a benchmark that reports failure honestly.
 - `importlib` on 3.10: `tomllib` is 3.11+, so a minimal parser covers the TOML subset `Config.save()`
   writes (#13).
 
+### Fixed after the first alpha draft
+
+- Question-shaped searches returned nothing (#25); the importer promoted entries with no evidence (#26) and
+  pasted tool transcripts as trusted statements (#30); the whole graph was lost by `rm index.db` (#24); and a
+  vault written before the identity key crashed on every command (#23). All fixed and verified against the
+  live corpus: `audit` went from 516 problems to `[]`, and question-shaped recall from 0.00 to 0.52.
+
 ### Known at this version
 
-- Question-shaped searches return nothing until #25.
-- The importer promotes entries without evidence (#26) and pasted tool transcripts (#30) as trusted
-  statements; `quipu audit` reports both, and a re-import after those fixes corrects the state.
-- The graph is only as populated as the `--edge` assertions written, and it was not reproducible from the
-  markdown before #24.
+- Rank-1 precision ignores *where* a match lands, so the top hit for a topic question is often a demoted
+  transcript (#31).
+- A migrated pre-`key` database backfills the identity key but not the display name, so `timeline` reports an
+  empty graph instead of crashing (#37).
+- `write --supersedes` does not close the graph edge it replaces; correct the graph explicitly until #20
+  lands.
+- The graph is only as populated as the `--edge` assertions written — the imported corpus carried none.
 - Imported history contributes recall, not training data, until the `ask` backfill lands (#27).
 
 ## 0.1.0
