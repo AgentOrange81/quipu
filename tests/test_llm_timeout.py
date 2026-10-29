@@ -13,7 +13,11 @@ Deterministic: tmp vaults only, no network, no sleeps. Nothing here calls the LL
 import argparse
 
 import pytest
-import tomllib
+
+try:  # Python 3.11+
+    import tomllib
+except ModuleNotFoundError:  # Python 3.10: fall back to the parser load() itself uses
+    tomllib = None
 
 from quipu import config as config_mod
 from quipu.cli import _provider, build_parser
@@ -29,7 +33,7 @@ def test_config_round_trip_of_llm_timeout(tmp_path):
     cfg.save()
 
     text = (vault / ".quipu" / "config.toml").read_text(encoding="utf-8")
-    data = tomllib.loads(text)
+    data = tomllib.loads(text) if tomllib else config_mod._mini_toml(text)
     assert data["llm"]["timeout"] == 240, f"the raw [llm] block must carry the timeout:\n{text}"
 
     again = config_mod.load(vault)
