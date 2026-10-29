@@ -8,6 +8,15 @@ truth and a migration is the user's data.
 
 ### Added
 
+- **`quipu hook`** — the session-end entry point (#3). `quipu hook --transcript <file|-> --agent <a>`
+  runs reflect → apply → index in one call and speaks only in exit codes: 0 if the pass completed,
+  non-zero with the reason on stderr for a missing or empty transcript, a transport error, an
+  unparseable response or a timeout. Nothing is written until the model has answered in full, so a
+  failed pass leaves the vault untouched; `--timeout` (default 300 s) cuts a hung endpoint off on a
+  worker thread because the call sits in a framework's shutdown path; `QUIPU_HOOK_DRY_RUN=1` prints the
+  prompt and writes nothing. A completed pass that proposes nothing exits 0 **and says so on stderr** —
+  a hook that runs for a week and writes nothing must never be silent.
+
 - **`quipu ask-backfill`** — asks a chat endpoint one question per entry that has no `ask`, validates the
   answer (one line, ends in `?`, 20–200 bytes, not a restatement of the summary) and writes it in place
   after `summary:`, never renaming the note. Dry run by default, `--sample N` to review proposals,

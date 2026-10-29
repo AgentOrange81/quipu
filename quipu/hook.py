@@ -1,0 +1,121 @@
+"""`quipu hook` — the session-end entry point a framework calls, without embedding quipu (#3).
+
+A memory system that nobody calls gathers nothing, and a hook that fails quietly is worse than no hook:
+the session ends, the framework says "memory: ok", and nothing was written. This module is the one place
+that trade is decided, so every failure path raises or exits non-zero, and a hung endpoint cannot hold
+the session open:
+
+- `run()` does capture -> reflect -> apply in that order, writing only after the model returned, so a
+  transport error leaves the vault untouched rather than half-written;
+- the reflection call is bounded by `timeout` (default 300 s) on a worker thread, because a blocking
+  `urlopen` has no deadline of its own once it is inside a framework's shutdown path;
+- `dry_run` (or `QUIPU_HOOK_DRY_RUN=1`) returns the exact prompt and writes nothing, which is how a
+  human checks the hook without spending tokens.
+
+The transcript is a path to the session file (Hermes JSONL or plain markdown) or `-` for stdin.
+"""
+from __future__ import annotations
+
+import os
+import sys
+import threading
+import time
+from dataclasses import dataclass, field
+from pathlib import Path
+
+from . import graph as graph_mod
+from . import index as index_mod
+from . import promote as promote_mod
+from .store import Entry, iter_entries
+
+DEFAULT_TIMEOUT = 300.0
+
+
+class HookError(RuntimeError):
+    """Anything that means the pass did not complete. The caller exits non-zero and prints it."""
+
+
+@dataclass
+class HookResult:
+    written: list[Entry] = field(default_factory=list)
+    prompt: str = ""
+    proposed: int = 0
+    seconds: float = 0.0
+
+    @property
+    def promoted(self) -> int:
+        return sum(1 for e in self.written if e.state == "promoted")
+
+    def line(self) -> str:
+        return (f"{len(self.written)} entries, {self.promoted} promoted, "
+                f"{len(self.written) - self.promoted} raw, {self.seconds:.1f}s")
+
+
+def read_transcript(source: str | Path, stdin=None) -> str:
+    """A path, or `-` for stdin. A missing file is a failure, not an empty pass."""
+    if str(source) == "-":
+        return (stdin or sys.stdin).read()
+    path = Path(source)
+    if not path.exists():
+        raise HookError(f"transcript not found: {path}")
+    try:
+        return path.read_text(encoding="utf-8", errors="replace")
+    except OSError as exc:
+        raise HookError(f"cannot read transcript {path}: {exc}") from exc
+
+
+def _existing(cfg) -> list[str]:
+    return [e.summary for _p, e in iter_entries(cfg.root) if e.state == "promoted"]
+
+
+def _reflect_bounded(text: str, cfg, provider, timeout: float):
+    """Run the model call on a worker thread so a hung endpoint cannot block session end.
+
+    `urlopen(timeout=...)` covers a dead socket, not a server that accepted the request and then
+    stopped talking — and this call sits in a framework's shutdown path, where hanging is the worst
+    outcome available.
+    """
+    box: dict = {}
+
+    def work():
+        try:
+            box["proposals"] = promote_mod.reflect(text, cfg, provider, _existing(cfg))
+        except BaseException as exc:  # noqa: BLE001 - reported, not swallowed
+            box["error"] = exc
+
+    thread = threading.Thread(target=work, name="quipu-hook-reflect", daemon=True)
+    thread.start()
+    thread.join(timeout)
+    if thread.is_alive():
+        raise HookError(f"reflection timed out after {timeout:g}s (endpoint {cfg.llm_base_url})")
+    if "error" in box:
+        exc = box["error"]
+        raise HookError(f"reflection failed: {type(exc).__name__}: {exc}") from exc
+    return box.get("proposals") or []
+
+
+def run(cfg, transcript: str | Path, provider, agent: str = "", project: str = "",
+        session: str = "", timeout: float = DEFAULT_TIMEOUT, dry_run: bool = False,
+        stdin=None) -> HookResult:
+    started = time.monotonic()
+    text = read_transcript(transcript, stdin=stdin)
+    if not text.strip():
+        raise HookError(f"empty transcript: {transcript}")
+
+    if dry_run:
+        return HookResult(prompt=promote_mod.build_prompt(text, cfg, _existing(cfg)),
+                          seconds=time.monotonic() - started)
+
+    proposals = _reflect_bounded(text, cfg, provider, timeout)
+    # nothing is written until the model has answered in full: a transport error above leaves the
+    # vault exactly as it was, which is what "no partial entry" means
+    written = promote_mod.apply(proposals, cfg, agent=agent, project=project,
+                                session=session, source=str(transcript))
+    graph_mod.materialize(cfg)
+    index_mod.reindex(cfg.root, cfg.db_path)
+    return HookResult(written=written, proposed=len(proposals), seconds=time.monotonic() - started)
+
+
+def dry_run_requested(env: dict | None = None) -> bool:
+    value = (env or os.environ).get("QUIPU_HOOK_DRY_RUN", "")
+    return value.strip().lower() in {"1", "true", "yes", "on"}
