@@ -328,6 +328,12 @@ def cmd_audit(args) -> int:
     return 0 if not problems else 1
 
 
+def cmd_mcp(args) -> int:
+    """Serve the vault over MCP on stdio — tools instead of a subprocess per query."""
+    from .mcp import serve
+    return serve(_cfg(args).root)
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="quipu", description="local-first agent memory")
     p.add_argument("--vault", default=".", help="vault root (default: cwd)")
@@ -361,6 +367,8 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--edge", action="append", metavar="SRC:PRED:DST",
                    help="assert a graph edge from this entry (repeatable)")
     s.add_argument("--allow-new", action="store_true")
+
+    add("mcp", "serve the vault over MCP (stdio JSON-RPC)", cmd_mcp)
 
     s = add("import", "import a corpus into the vault", cmd_import)
     s.add_argument("--vault", dest="vault_override", default=None,
