@@ -56,15 +56,17 @@ in sibling directories, and those are not what an import is for. The report make
 visible instead of leaving it implicit — `directories_ignored` says what the policy left behind,
 counting markdown files in each ignored subdirectory at any depth, and `skipped_by_reason` says
 why each file was skipped: `ignored name`, `empty body`, `no type`, `unparsable frontmatter`,
-`duplicate id`, `noise (training_value: low)`.
+`noise (training_value: low)`.
 
-The shape of a report:
+The shape of a report, quoting a real run over the archived corpus:
 
 ```json
-{"written": 817, "skipped": 14,
- "skipped_by_reason": {"empty body": 3, "no type": 1},
- "directories_ignored": {"_stubs": 4080, "_dupes": 481},
- "by_kind": {"decision": 556}, "by_state": {"promoted": 277, "raw": 512}}
+{"written": 846, "skipped": 19,
+ "skipped_by_reason": {"ignored name": 1, "noise (training_value: low)": 16,
+                       "unparsable frontmatter": 2},
+ "directories_ignored": {"_dupes": 481, "_meta": 1, "_stubs": 4080, "daily": 66, "templates": 7},
+ "by_kind": {"decision": 556, "conclusion": 177, "capture": 96, "handoff": 17},
+ "by_state": {"promoted": 277, "raw": 512, "pruned": 57}}
 ```
 
 Since #26 an entry that claims `training_value: high` is promoted only if it also carries
