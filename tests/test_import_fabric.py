@@ -116,7 +116,8 @@ def test_counts_per_kind_and_state(tmp_path):
     # 12 files, 1 of them session noise -> 11 written, 1 skipped
     assert len(result.written) == 11
     assert len(result.skipped) == 1
-    assert {p.name for p in result.skipped} == {"11-session-low.md"}
+    assert {(p.name, reason) for p, reason in result.skipped} == {
+        ("11-session-low.md", "noise (training_value: low)")}
 
     assert result.by_kind == {
         "capture": 3, "conclusion": 2, "decision": 2, "fact": 1,

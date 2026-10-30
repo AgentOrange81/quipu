@@ -221,24 +221,31 @@ def cmd_import(args) -> int:
         cfg = config_mod.load(vault, create=False)
         result = fabric_mod.import_fabric(src, cfg.root, dry_run=True,
                                          include_noise=args.include_noise,
-                                         promote_threshold=cfg.promote_threshold)
+                                         promote_threshold=cfg.promote_threshold,
+                                         recurse=args.recurse, skip_dirs=args.skip_dirs)
         print(json.dumps(_import_summary(result, src, vault, True), indent=2))
         return 0
     cfg = config_mod.load(vault, create=True)
     result = fabric_mod.import_fabric(src, cfg.root, dry_run=False, include_noise=args.include_noise,
-                                      promote_threshold=cfg.promote_threshold)
+                                      promote_threshold=cfg.promote_threshold,
+                                      recurse=args.recurse, skip_dirs=args.skip_dirs)
     index_mod.reindex(cfg.root, cfg.db_path)
     print(json.dumps(_import_summary(result, src, vault, False), indent=2))
     return 0
 
 
 def _import_summary(result, src, vault, dry_run) -> dict:
+    reasons: dict[str, int] = {}
+    for _path, reason in result.skipped:
+        reasons[reason] = reasons.get(reason, 0) + 1
     return {
         "source": str(src),
         "vault": str(vault),
         "dry_run": dry_run,
         "written": len(result.written),
         "skipped": len(result.skipped),
+        "skipped_by_reason": dict(sorted(reasons.items())),
+        "directories_ignored": dict(sorted(result.directories_ignored.items())),
         "by_kind": result.by_kind,
         "by_state": result.by_state,
     }
@@ -646,6 +653,12 @@ def build_parser() -> argparse.ArgumentParser:
     fs.add_argument("--dry-run", action="store_true", help="report counts, write nothing")
     fs.add_argument("--include-noise", action="store_true",
                     help="also import low-value session entries (as pruned)")
+    fs.add_argument("--recurse", action="store_true",
+                    help="read the whole tree, not just the top level (default: top-level *.md only; "
+                         "the report's directories_ignored lists what the default left behind)")
+    fs.add_argument("--skip-dir", action="append", metavar="NAME", dest="skip_dirs",
+                    help="with --recurse, a subtree to refuse; repeatable "
+                         f"(default: {', '.join(sorted(fabric_mod.DEFAULT_SKIP_DIRS))})")
 
     s = add("reflect", "run the promotion pass over a transcript", cmd_reflect)
     s.add_argument("transcript", nargs="?")
