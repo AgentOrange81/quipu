@@ -16,7 +16,14 @@ from . import DEFAULT_PREDICATES
 DEFAULT_PROMOTE_THRESHOLD = 0.5
 
 #: The endpoint read timeout, in seconds, when the config says nothing about it.
-DEFAULT_LLM_TIMEOUT = 120
+#:
+#: One request is one chunk, and a chunk of a real session is not small: a 12-line slice of a Hermes JSONL
+#: transcription is 68 KB and a 185-line session is 509 KB. At 120 s the on-box 35B tier answered a 178 KB
+#: chunk with `TimeoutError: timed out` — on exactly the sessions the pass exists for, which reads as the
+#: pass being broken rather than the budget being wrong. A short `transcript.md` hides this completely.
+#: 600 s is chosen to survive a real chunk on a slow local tier while still failing a hung endpoint inside
+#: a coffee break; a cloud tier answers in seconds and never approaches it.
+DEFAULT_LLM_TIMEOUT = 600
 
 
 @dataclass

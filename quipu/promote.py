@@ -15,7 +15,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from . import KINDS
-from .config import Config
+from .config import DEFAULT_LLM_TIMEOUT, Config
 from .graph import add_edge, close_superseded, ensure_entity
 from .index import connect
 from .store import Entry, check_summary, first_prose_line, format_edge_spec, looks_like_blob, write_entry
@@ -248,7 +248,8 @@ class FakeProvider:
 class HttpProvider:
     """Any OpenAI-compatible /chat/completions endpoint (Ollama Cloud, llama.cpp, vLLM, Ollama)."""
 
-    def __init__(self, base_url: str, model: str, api_key: str = "", timeout: int = 120):
+    def __init__(self, base_url: str, model: str, api_key: str = "",
+                 timeout: int = DEFAULT_LLM_TIMEOUT):
         self.base_url = base_url.rstrip("/")
         self.model = model
         self.api_key = api_key
@@ -275,6 +276,14 @@ class HttpProvider:
         except urllib.error.URLError as exc:
             raise RuntimeError(f"LLM request failed: {url}: {exc}") from exc
         except OSError as exc:  # a socket timeout surfaces here, not as a URLError
+            if isinstance(exc, TimeoutError):  # includes socket.timeout
+                # the timeout is the ONE failure with a knob behind it, and the old message named the
+                # endpoint instead, so a user read "timed out" and had no idea what to change
+                raise RuntimeError(
+                    f"LLM request failed: {url}: no response within {self.timeout}s. One chunk is one "
+                    f"request, so a large chunk needs a longer budget: raise `--endpoint-timeout` (or "
+                    f"`[llm] timeout` in .quipu/config.toml), lower `--max-chars`, or point "
+                    f"`[llm] base_url` at a faster endpoint") from exc
             raise RuntimeError(f"LLM request failed: {url}: {type(exc).__name__}: {exc}") from exc
         try:
             data = json.loads(raw)

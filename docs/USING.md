@@ -402,7 +402,7 @@ until the model has answered in full, so a failed pass leaves the vault exactly 
   nothing looks exactly like this.
 
 Measured: a 3 KB transcript against the local `qwen3.6-35b-a3b` took 104 s and proposed nothing (exit 0
-with the warning); a 14 KB transcript hit the endpoint's own 120 s read timeout and the hook exited 1
+with the warning); a 14 KB transcript hit the endpoint's own read timeout and the hook exited 1
 with `reflection failed: TimeoutError: timed out` and no partial entry. Chunking a long transcript is
 #2, not something the hook should guess at.
 
@@ -430,7 +430,7 @@ modes.
 
 A real session does not fit in one prompt, and pretending it does fails quietly or loudly depending on the
 endpoint. Measured against the local 35B on `:8080`: a 3 KB session produced nothing in 104 s, and a 14 KB
-one blew the endpoint's own 120 s read timeout. So `reflect` loads the transcript by **shape** and sends it
+one blew the endpoint's own read timeout. So `reflect` loads the transcript by **shape** and sends it
 in pieces.
 
 Two shapes are understood:
@@ -465,7 +465,7 @@ twice, and one claim must stay one entry. `quipu hook` uses the same loader and 
 ### The two timeouts
 
 Two different budgets, and they are not interchangeable. `[llm] timeout` in `.quipu/config.toml` (default
-120 s) is the read timeout for **one request** to the model endpoint — raise it when a single chunk is
+600 s) is the read timeout for **one request** to the model endpoint — raise it when a single chunk is
 simply slow. `--endpoint-timeout SECONDS` on `quipu reflect` and `quipu hook` overrides it for that
 command only. `quipu hook --timeout` is the other knob entirely: the budget for the **whole pass**, all
 chunks together — raise it when the pass as a whole is running long. A value of `0`, a negative number or
@@ -477,10 +477,20 @@ timeout = 240
 ```
 
 Size `--max-chars` from the measurement rather than from hope: a 3 KB chunk takes roughly 100 s on the
-local 35B, so the default 120 s cap fits about one 3 KB chunk and a 300 s cap about 8–10 KB. Raise
-`--endpoint-timeout` when a chunk is slow; raise `hook --timeout` (or shrink `--max-chars`) when the pass
-as a whole runs long. Both have to be sized together — a pass of eight chunks at 240 s each still needs a
-budget larger than 240 s.
+local 35B, so a 120 s cap fits about one 3 KB chunk and a 600 s cap about 15–20 KB. The default is 600 s
+because two minutes is not enough for the sessions this pass exists for — a 12-line slice of a real Hermes
+session is 68 KB, and a 178 KB chunk died at 120 s with nothing but `timed out` and an endpoint URL in the
+message. A timed-out request now says which knob to turn:
+
+```
+LLM request failed: http://127.0.0.1:8080/v1/chat/completions: no response within 600s. One chunk is one
+request, so a large chunk needs a longer budget: raise `--endpoint-timeout` (or `[llm] timeout` in
+.quipu/config.toml), lower `--max-chars`, or point `[llm] base_url` at a faster endpoint
+```
+
+Raise `--endpoint-timeout` when a chunk is slow; raise `hook --timeout` (or shrink `--max-chars`) when the
+pass as a whole runs long. Both have to be sized together — a pass of eight chunks at 240 s each still
+needs a budget larger than 240 s.
 
 ## Exporting
 
