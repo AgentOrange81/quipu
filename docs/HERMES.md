@@ -104,13 +104,17 @@ The provider adds two tools for an agent that wants to reach further than the re
 | tool | what it takes | what it does |
 |---|---|---|
 | `quipu_search` | `query`, optional `limit` (default 5) | BM25 search over the vault index; returns id, summary, state, score |
-| `quipu_write` | `summary` and `evidence` (both required), optional `ask`, `kind` (default `fact`), `project`, `agent` | writes one entry into the vault and reindexes it |
+| `quipu_write` | `summary` and `evidence` (both required), optional `ask`, `kind` (default `fact`), `project`, `agent`, `importance`, `state` | writes one entry into the vault, reindexes it, and returns the `state` it actually wrote |
 
 Call `quipu_write` after a real outcome — a decision with its reason, a measurement, a root cause
 — and not per turn. The summary is the retrieval handle, so write it as a statement; the evidence
-is what a skeptic would re-run. One caveat, because it is in the code and nowhere in the prose:
-the write tool exposes no state, so what it writes lands `state=raw`. Promoted entries still come
-from the reflection pass or the CLI's `--state promoted`.
+is what a skeptic would re-run.
+
+An entry is promoted on the same grounds as any other: evidence **and** `importance` at or above the
+vault's `promote_threshold` (0.5 by default). Omit `importance` and the entry stays `raw` — kept and
+searchable, but not exported as training data. `state: promoted` cannot override the gate; asking for
+it without the grounds writes `raw` and says so in a `note` field rather than failing the write.
+`state: pruned` is honoured as-is, since pruning is a deliberate act rather than a gate question.
 
 ## Measuring it
 

@@ -117,7 +117,13 @@ WRITE_SCHEMA = _schema(
      "ask": _str_prop("Optional: the standalone question this entry answers."),
      "kind": _str_prop("Optional entry kind (default 'fact')."),
      "project": _str_prop("Optional project tag."),
-     "agent": _str_prop("Optional agent name.")},
+     "agent": _str_prop("Optional agent name."),
+     "importance": {"type": "number",
+                    "description": "Optional 0-1 confidence. With evidence and importance at or above "
+                                   "the vault's promote_threshold, the entry is written promoted."},
+     "state": {"type": "string", "enum": ["raw", "promoted", "pruned"],
+               "description": "Optional. Omit to let the evidence+importance gate decide; "
+                              "'promoted' is refused (written raw) when evidence is missing."}},
     ["summary", "evidence"],
 )
 
@@ -344,8 +350,36 @@ class QuipuMemoryProvider(MemoryProvider):
         payload = dict(args)
         payload.setdefault("kind", "fact")
         payload.setdefault("session", self._session_id)
-        result = mcp_mod._write(config_mod.load(self._vault), payload)
-        return json.dumps({"id": result["id"], "path": result["path"]})
+        cfg = config_mod.load(self._vault)
+        evidence = str(payload.get("evidence") or "").strip()
+        try:
+            importance = float(payload.get("importance") or 0.0)
+        except (TypeError, ValueError):
+            importance = 0.0
+        payload["importance"] = importance
+        requested = str(payload.get("state") or "").strip().lower()
+        # An agent write is promoted only on the same grounds as any other entry: evidence AND
+        # importance clearing the vault's threshold. `state: promoted` cannot mint one without them,
+        # and an explicit `promoted` with no evidence is downgraded rather than refused, because
+        # losing the memory to punish the caller is the worse trade.
+        eligible = bool(evidence) and importance >= cfg.promote_threshold
+        if requested == "promoted":
+            state = "promoted" if eligible else "raw"
+        elif requested in {"raw", "pruned"}:
+            state = requested
+        else:
+            state = "promoted" if eligible else "raw"
+        payload["state"] = state
+        result = mcp_mod._write(cfg, payload)
+        out = {"id": result["id"], "path": result["path"], "state": state,
+               "importance": importance}
+        if requested == "promoted" and state != "promoted":
+            out["note"] = (
+                f"written raw, not promoted: promotion needs evidence and importance >= "
+                f"{cfg.promote_threshold:g}, got evidence={'yes' if evidence else 'no'}, "
+                f"importance={importance:g}"
+            )
+        return json.dumps(out)
 
 
 def _spawn_thread(target, *, name: str) -> threading.Thread:
