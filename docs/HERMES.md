@@ -104,7 +104,7 @@ The provider adds two tools for an agent that wants to reach further than the re
 | tool | what it takes | what it does |
 |---|---|---|
 | `quipu_search` | `query`, optional `limit` (default 5) | BM25 search over the vault index; returns id, summary, state, score |
-| `quipu_write` | `summary` and `evidence` (both required), optional `ask`, `kind` (default `fact`), `project`, `agent`, `importance`, `state` | writes one entry into the vault, reindexes it, and returns the `state` it actually wrote |
+| `quipu_write` | `summary` and `evidence` (both required), optional `ask`, `kind` (default `fact`), `project`, `agent`, `importance`, `state`, `edges`, `supersedes` | writes one entry into the vault, reindexes it, and returns the `state` it actually wrote |
 
 Call `quipu_write` after a real outcome — a decision with its reason, a measurement, a root cause
 — and not per turn. The summary is the retrieval handle, so write it as a statement; the evidence
@@ -115,6 +115,12 @@ vault's `promote_threshold` (0.5 by default). Omit `importance` and the entry st
 searchable, but not exported as training data. `state: promoted` cannot override the gate; asking for
 it without the grounds writes `raw` and says so in a `note` field rather than failing the write.
 `state: pruned` is honoured as-is, since pruning is a deliberate act rather than a gate question.
+
+`edges` takes `src:predicate:dst` strings and `supersedes` takes entry ids. Predicates are a closed
+vocabulary — `causes`, `depends_on`, `implements`, `supersedes`, `decided_against`, `measured_as`,
+`located_in`, `used_by`, `blocks`, `owned_by`, `part_of`, `contradicts`, `learned_from` — and an invented
+one is reported in `skipped_edges` rather than written. A malformed spec costs the claim, never the
+memory: the entry is still written, reindexed, and returned.
 
 ## Measuring it
 
