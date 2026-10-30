@@ -72,6 +72,12 @@ evidence — the rest arrive `raw` and tagged `import:no-evidence`. A label inhe
 system is a claim, and the import applies the same gate `promote.py` applies before agreeing
 with it.
 
+A corpus that keeps its entries deeper than one level can be imported with `--recurse`, which
+refuses `_dupes`, `_stubs`, `_meta`, `templates`, `.obsidian` and `assets` by default; `--skip-dir`
+replaces that list and can be repeated. A duplicate id is not a skip: the second file sharing one
+keeps a stable id derived from its path, because dropping a file a neighbour already named loses
+data for the sake of a tidier report.
+
 ## What makes an entry worth promoting
 
 The gate is one line, in `quipu/promote.py`:
