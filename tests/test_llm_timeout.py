@@ -1,6 +1,7 @@
 """Acceptance gate for the configurable LLM read timeout (cipher's llm-timeout branch).
 
-Black-box contract tests, written against the CONTRACT — `Config.llm_timeout` (default 120) saved
+Black-box contract tests, written against the CONTRACT — `Config.llm_timeout` (default
+`DEFAULT_LLM_TIMEOUT`, 600 s since 0.5.2) saved
 as `timeout = N` inside the `[llm]` block of `.quipu/config.toml`, `clil._provider()` wiring it
 into `HttpProvider`, `--endpoint-timeout` on `reflect` and `hook` overriding it per command, and
 a hard `ValueError` naming `llm.timeout` for any value `<= 0` or non-integer — never against an
@@ -40,9 +41,54 @@ def test_config_round_trip_of_llm_timeout(tmp_path):
     assert again.llm_timeout == 240, "the saved timeout must load back"
 
 
-def test_a_fresh_vault_defaults_to_120(tmp_path):
+def test_a_fresh_vault_takes_the_default_budget(tmp_path):
+    """The default is a measured number, not a taste: see DEFAULT_LLM_TIMEOUT in quipu/config.py.
+
+    A 12-line slice of a real Hermes session is 68 KB; at 120 s the on-box 35B tier timed out on a 178 KB
+    chunk. The default must cover a real chunk or the pass fails on exactly what it is for.
+    """
     cfg = config_mod.load(tmp_path / "vault", create=True)
-    assert cfg.llm_timeout == 120, "a fresh vault has llm_timeout 120"
+    assert cfg.llm_timeout == config_mod.DEFAULT_LLM_TIMEOUT
+    assert cfg.llm_timeout >= 600
+
+
+def test_the_client_default_matches_the_config_default():
+    """Two defaults for one number is how a provider call silently keeps the old budget."""
+    from quipu.promote import HttpProvider
+
+    assert HttpProvider("http://127.0.0.1:9/v1", "m").timeout == config_mod.DEFAULT_LLM_TIMEOUT
+
+
+def test_a_timeout_names_the_knobs(monkeypatch):
+    """The old message named the endpoint and stopped there, so a user had nothing to turn."""
+    import urllib.request
+
+    from quipu.promote import HttpProvider
+
+    def boom(*_a, **_k):
+        raise TimeoutError("timed out")
+
+    monkeypatch.setattr(urllib.request, "urlopen", boom)
+    with pytest.raises(RuntimeError) as caught:
+        HttpProvider("http://127.0.0.1:8081/v1", "m", timeout=600).complete("hello")
+    message = str(caught.value)
+    assert "no response within 600s" in message
+    assert "--endpoint-timeout" in message and "[llm] timeout" in message and "--max-chars" in message
+
+
+def test_a_connection_error_is_not_dressed_up_as_a_timeout(monkeypatch):
+    import urllib.error
+    import urllib.request
+
+    from quipu.promote import HttpProvider
+
+    def boom(*_a, **_k):
+        raise urllib.error.URLError("Connection refused")
+
+    monkeypatch.setattr(urllib.request, "urlopen", boom)
+    with pytest.raises(RuntimeError) as caught:
+        HttpProvider("http://127.0.0.1:9/v1", "m").complete("hello")
+    assert "--max-chars" not in str(caught.value), "chunk-size advice belongs on a timeout only"
 
 
 def test_the_config_value_reaches_the_provider(tmp_path):
