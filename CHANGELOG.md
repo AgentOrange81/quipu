@@ -4,9 +4,28 @@ Notable changes, newest first. Versions follow `0.x` while the format and the CL
 anything that changes a vault's on-disk shape gets an explicit note, because markdown is the source of
 truth and a migration is the user's data.
 
-## Unreleased
+## 0.3.0 — 2026-10-29
+
+The gate release. 0.2.0-alpha proved quipu could be used; this one makes its labels and its edges
+trustworthy enough to build a dataset from, and makes a release something a machine produces rather than
+something a person remembers to do.
+
+The through-line is the same argument at three sizes: **`state` is a claim with evidence behind it, not a
+mood.** An import that inherits a dead system's `training_value` now demotes every entry that cannot show
+evidence and says so in the report; a session-end hook that cannot answer leaves the vault untouched and
+exits non-zero; an index written by an older version is rebuilt from the markdown rather than migrated.
+Everything that writes also says what it refused to write.
+
+Live corpus at the tag: 879 entries, 309 promoted, 3 graph edges, `audit` clean.
 
 ### Added
+
+- **The import report says why** (`quipu import fabric`, #17). `skipped` was a bare integer that meant both
+  "noise we meant to drop" and "we could not parse this file", and the subdirectories the importer ignores
+  were not mentioned at all — 4,635 markdown files on the archived corpus. The report now carries
+  `skipped_by_reason` (`ignored name`, `empty body`, `no type`, `unparsable frontmatter`, `duplicate id`,
+  `noise (training_value: low)`) and `directories_ignored` (each subdirectory and how many markdown files it
+  holds, counted at any depth). Policy stays top-level-only; it is now visible policy.
 
 - **The endpoint read timeout is configurable** (`[llm] timeout`, `--endpoint-timeout`, #68). One
   request to the model endpoint is now bounded by a read timeout that defaults to 120 s; a vault
@@ -48,6 +67,16 @@ truth and a migration is the user's data.
 
 ### Fixed
 
+- **The hook reads through the transcript loader** (#70). `quipu hook` said it shared `reflect`'s loader and
+  did not: it handed raw text to the chunker, so a session JSONL reached the model as raw JSON rows and the
+  chunker fell into its markdown branch. A loader failure is still a `HookError`, the chunk breakdown goes
+  to stderr when `--dry-run` keeps stdout for one JSON document, and the load now counts the malformed lines
+  it dropped — a session that quietly lost half its lines looked exactly like a clean one.
+- **The 3.10 config parser strips inline comments** (#72). A hand-commented `config.toml`
+  (`promote_threshold = 0.5  # keep`) loaded on 3.11+ and raised on 3.10, because `_mini_toml` never stripped
+  trailing comments; `[llm] timeout` survived only because it is pre-scanned. Scalars now pass through the
+  quote-aware stripper and arrays are stripped once closed, so the same file loads to the same values on
+  every supported interpreter.
 - **The live-vault benchmark now scores the answer, not the subject** (#47). `rank1_ok` counted rank 1 as
   correct when its summary merely contained a stem from the question, so a hardware audit that said
   "gateway" scored for "which model is the gateway default" — and the 9/10 it published was quoted as
