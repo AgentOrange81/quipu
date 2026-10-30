@@ -49,6 +49,29 @@ vault so an old archive becomes recallable through the same `search` / `timeline
 with a `pruned:low-training-value` tag, never as promoted; `--include-noise` imports them instead
 of skipping them.
 
+## What the import reads, and what it leaves behind
+
+The importer reads **top-level `*.md` only**, on purpose: a corpus keeps its stubs and duplicates
+in sibling directories, and those are not what an import is for. The report makes that policy
+visible instead of leaving it implicit — `directories_ignored` says what the policy left behind,
+counting markdown files in each ignored subdirectory at any depth, and `skipped_by_reason` says
+why each file was skipped: `ignored name`, `empty body`, `no type`, `unparsable frontmatter`,
+`duplicate id`, `noise (training_value: low)`.
+
+The shape of a report:
+
+```json
+{"written": 817, "skipped": 14,
+ "skipped_by_reason": {"empty body": 3, "no type": 1},
+ "directories_ignored": {"_stubs": 4080, "_dupes": 481},
+ "by_kind": {"decision": 556}, "by_state": {"promoted": 277, "raw": 512}}
+```
+
+Since #26 an entry that claims `training_value: high` is promoted only if it also carries
+evidence — the rest arrive `raw` and tagged `import:no-evidence`. A label inherited from another
+system is a claim, and the import applies the same gate `promote.py` applies before agreeing
+with it.
+
 ## What makes an entry worth promoting
 
 The gate is one line, in `quipu/promote.py`:
