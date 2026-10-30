@@ -4,6 +4,28 @@ Notable changes, newest first. Versions follow `0.x` while the format and the CL
 anything that changes a vault's on-disk shape gets an explicit note, because markdown is the source of
 truth and a migration is the user's data.
 
+## 0.5.1 — 2026-10-31
+
+A patch on the 0.5.0 guards, and one measurement worth having.
+
+### Fixed
+
+- **a reflection proposal now faces the same handle rule as every other write** (#85). `apply()` was the
+  last surface that wrote a summary without checking its shape: a model's JSON can carry a
+  quoted-scalar or a serialised blob, and both went to disk unchecked while the CLI, `capture` and the
+  importer all refused or repaired them (#77). A blob is replaced by the body's first prose line; a blob
+  with no prose anywhere keeps its text, because a mis-shaped handle costs the handle, never the memory.
+
+### Measured
+
+- **the reflection pass produces edges.** A real 68 KB transcript chunk (12 JSONL lines) through the
+  on-box Flash-Next endpoint: 4 proposals, 4 promoted, 0 raw, and **every promoted entry carried an edge**
+  (`npm:used_by:solana-volume-bot`, `walls.csv:part_of:solana-volume-bot` x3) — 3 graph nodes from one
+  chunk. So the live vault's 3-edges-for-892-entries is not the pass failing at edges; it is the pass not
+  being run. That changes what #85 option 3 is worth: the machinery is already there.
+
+Live corpus at the tag: 893 entries, 321 promoted, `audit` clean.
+
 ## 0.5.0 — 2026-10-31
 
 The graph release. 0.4.0 put the vault inside the agent; this one makes the relations between what is
