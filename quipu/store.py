@@ -93,8 +93,67 @@ class SummaryTooLong(ValueError):
             f"(the first {limit} bytes are: {summary.encode('utf-8')[:limit].decode('utf-8', 'ignore')!r}…)")
 
 
-def check_summary(summary: str, limit: int = SUMMARY_LIMIT_BYTES, allow_long: bool = False) -> None:
-    """Raise `SummaryTooLong` unless the summary fits, or the caller deliberately opted out."""
+#: A summary that opens with one of these is not a statement, it is a serialised object or a fenced
+#: block that was pasted where the handle belongs (#77).
+_BLOB_OPENERS = ("{", "[", "```", "~~~")
+
+
+def looks_like_blob(summary: str) -> bool:
+    """Is this summary a serialised object or a fenced block rather than prose? (#77)
+
+    The 0.3.0 importer and `capture` both accepted a summary of this shape, and a blob's tokens
+    index as well as prose's — so twenty-one entries on the live vault were ranking on text no agent
+    can read, inside a 400-token recall budget. The body may keep the blob; the handle may not.
+    """
+    s = (summary or "").strip()
+    if len(s) >= 2 and s[0] == '"' and s[-1] == '"':
+        s = s[1:-1].strip()
+    return s.startswith(_BLOB_OPENERS)
+
+
+#: A line needs this many words before it reads as a statement rather than a label. "Heading" is a
+#: title, "Release notes" is a topic; neither is a fact an agent can act on.
+_PROSE_MIN_WORDS = 4
+
+
+def first_prose_line(text: str, *, limit: int = 200) -> str:
+    """The first line of `text` that can serve as a retrieval handle (#77), or "".
+
+    Skips blank lines, headings, fences, and anything that is a serialised blob. A candidate needs a
+    sentence's worth of words, because a title or a label is not a fact: deriving a summary from the
+    body is only an improvement if the derived line can be read as a statement.
+    """
+    for raw in (text or "").splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#") or looks_like_blob(line):
+            continue
+        if len(line.split()) < _PROSE_MIN_WORDS or not _PROSE_RE.search(line):
+            continue
+        return line[:limit]
+    return ""
+
+
+class SummaryNotProse(ValueError):
+    """A summary that cannot serve as a retrieval handle because it is a serialised blob."""
+
+    def __init__(self, summary: str):
+        self.head = (summary or "").strip()[:80]
+        super().__init__(
+            f"summary starts with {self.head!r}, which is a serialised blob, not a statement: the "
+            "summary is the retrieval handle and its tokens rank, so a JSON body or a fenced block "
+            "crowds real recall. Write one sentence here and put the blob in --body "
+            "(or pass --allow-summary-blob if this really is the handle).")
+
+
+def check_summary(summary: str, limit: int = SUMMARY_LIMIT_BYTES, allow_long: bool = False,
+                  allow_blob: bool = False) -> None:
+    """Raise unless the summary can serve as a retrieval handle.
+
+    `allow_long` and `allow_blob` are deliberate opt-outs for a caller that knows what it is doing;
+    an importer migrating a historical corpus uses neither, it reports instead.
+    """
+    if not allow_blob and looks_like_blob(summary):
+        raise SummaryNotProse(summary)
     if allow_long:
         return
     if len((summary or "").encode("utf-8")) > limit:

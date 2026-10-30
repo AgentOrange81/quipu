@@ -18,7 +18,7 @@ from . import KINDS
 from .config import Config
 from .graph import add_edge, close_superseded, ensure_entity
 from .index import connect
-from .store import Entry, format_edge_spec, write_entry
+from .store import Entry, check_summary, first_prose_line, format_edge_spec, write_entry
 
 PROMPT_PATH = Path(__file__).resolve().parent.parent / "prompts" / "promote.md"
 
@@ -381,9 +381,18 @@ def apply(proposals: list[Proposal], cfg: Config, agent: str = "", project: str 
 
 
 def record_capture(cfg: Config, text: str, agent: str = "", project: str = "", session: str = "",
-                   ask: str = "", source: str = "") -> Entry:
-    """Store a raw capture. Cheap, unfiltered, one fact per call."""
+                   ask: str = "", source: str = "", allow_blob: bool = False) -> Entry:
+    """Store a raw capture. Cheap, unfiltered, one fact per call.
+
+    The summary is the first prose line rather than blindly the first line: a capture whose body
+    opens with a JSON blob used to hand that blob to the retrieval handle, which then ranked on
+    text no agent can use (#77). A body with no prose at all is refused by `check_summary` unless
+    the caller opted out — the entry is not worth keeping if nothing in it can be stated.
+    """
+    first = text.splitlines()[0][:200]
+    summary = first if allow_blob else (first_prose_line(text) or first)
+    check_summary(summary, allow_blob=allow_blob)
     e = Entry(kind="capture", state="raw", agent=agent, project=project, session=session,
-              ask=ask, summary=text.splitlines()[0][:200], body=text, source=source or "capture")
+              ask=ask, summary=summary, body=text, source=source or "capture")
     write_entry(cfg.root, e)
     return e

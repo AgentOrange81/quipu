@@ -252,6 +252,24 @@ stop. `--allow-long-summary` exists for a deliberate exception; importers are un
 sits on the capture surfaces and not in `write_entry` — migrating 800 historical notes must never be
 blocked by a rule about new ones.
 
+Size is not the only way a handle stops being a handle. A summary that opens with `{`, `[` or a code
+fence is a serialised object or a pasted block, and its tokens rank exactly as well as prose's — which
+is how twenty-one entries on a real vault came to be competing for a 400-token recall budget with text
+no agent could read. Both capture surfaces now refuse the shape:
+
+```
+summary starts with '{"corrections_verified": [ {"correction": "(a) start() adds NO listeners"}]}', which
+is a serialised blob, not a statement: the summary is the retrieval handle and its tokens rank, so a JSON
+body or a fenced block crowds real recall. Write one sentence here and put the blob in --body (or pass
+--allow-summary-blob if this really is the handle).
+```
+
+`quipu capture` is friendlier, because its body *is* the capture: it takes the first prose line as the
+handle and keeps the blob in the body. The importer does the same for a historical note and refuses only
+when the body holds no prose at all, reporting `summary not prose` in `skipped_by_reason` — losing a
+memory to tidy a field is the worse trade. `quipu audit` reports `blob summary` for anything that got in
+before the rule existed.
+
 ## Optional semantic search
 
 `quipu search` is lexical (SQLite FTS5 + bm25) and works with nothing else installed. When a vault's

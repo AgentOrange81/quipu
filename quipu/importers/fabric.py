@@ -54,7 +54,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from ..config import DEFAULT_PROMOTE_THRESHOLD
-from ..store import Entry, looks_like_transcript, write_entry
+from ..store import Entry, first_prose_line, looks_like_blob, looks_like_transcript, write_entry
 
 #: fabric `type` -> quipu `kind`; unknown types fall back to DEFAULT_KIND
 KIND_BY_TYPE = {
@@ -125,6 +125,7 @@ SKIP_EMPTY_BODY = "empty body"
 SKIP_NO_TYPE = "no type"
 SKIP_UNPARSABLE = "unparsable frontmatter"
 SKIP_NOISE = "noise (training_value: low)"
+SKIP_SUMMARY_NOT_PROSE = "summary not prose"
 
 #: Subdirectories a fabric corpus keeps scaffolding in. `--recurse` walks past the top level, and
 #: these are the trees it must still refuse: stubs, duplicates, hub notes and templates are not
@@ -213,6 +214,15 @@ def import_fabric(src_dir: str | Path, vault_root: str | Path, *,
             continue
         kind = KIND_BY_TYPE.get(ftype.lower(), DEFAULT_KIND)
         summary = _scalar(fm.get("summary"))
+        if looks_like_blob(summary):
+            # #77: the summary is the retrieval handle, and a blob's tokens rank as well as prose's,
+            # so a JSON body here crowds real recall. The memory is the point, so derive a statement
+            # from the body; refuse only when the body holds no prose at all.
+            derived = first_prose_line(body)
+            if not derived:
+                result.skipped.append((path, SKIP_SUMMARY_NOT_PROSE))
+                continue
+            summary = derived
         evidence = _evidence(fm)
         importance = IMPORTANCE_BY_TRAINING_VALUE.get(training_value, 0.0)
         state = STATE_BY_TRAINING_VALUE.get(training_value, DEFAULT_STATE)

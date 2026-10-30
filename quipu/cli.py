@@ -20,11 +20,13 @@ from . import repair as repair_mod
 from .importers import fabric as fabric_mod
 from .store import (
     Entry,
+    SummaryNotProse,
     SummaryTooLong,
     check_summary,
     find_entry,
     format_edge_spec,
     iter_entries,
+    looks_like_blob,
     looks_like_transcript,
     parse_edge_spec,
     write_entry,
@@ -121,8 +123,9 @@ def cmd_write(args) -> int:
         specs.append((spec, src, predicate, dst))
         order.append(spec)
     try:
-        check_summary(args.summary, allow_long=getattr(args, "allow_long_summary", False))
-    except SummaryTooLong as exc:
+        check_summary(args.summary, allow_long=getattr(args, "allow_long_summary", False),
+                      allow_blob=getattr(args, "allow_summary_blob", False))
+    except (SummaryTooLong, SummaryNotProse) as exc:
         print(str(exc), file=sys.stderr)
         return 2
     e = Entry(kind=args.kind, state=args.state, agent=args.agent, project=args.project,
@@ -418,6 +421,10 @@ def cmd_audit(args) -> int:
                 problems.append(f"{e.id}: supersedes missing entry {old}")
         if not e.summary:
             problems.append(f"{e.id}: empty summary")
+        if looks_like_blob(e.summary):
+            # a blob where the handle belongs (#77): imported before the write boundary refused the
+            # shape. `quipu reindex` keeps it searchable, so the audit is how it stays findable.
+            problems.append(f"{e.id}: blob summary (re-import or rewrite as one sentence)")
         if e.summary[:1] in ("'", '"'):
             # an imported-and-quoted summary (#54): the importer keeps the markdown verbatim, so a
             # summary written as a YAML quoted scalar arrived with its quotes and often truncated at the
@@ -638,6 +645,9 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--allow-new", action="store_true")
     s.add_argument("--allow-long-summary", action="store_true",
                    help=f"permit a summary over {280} bytes (you almost certainly want --body)")
+    s.add_argument("--allow-summary-blob", action="store_true",
+                   help="permit a summary that opens with '{', '[' or a code fence (it will rank "
+                        "badly: put the blob in --body and write one sentence here)")
 
     add("mcp", "serve the vault over MCP (stdio JSON-RPC)", cmd_mcp)
 
