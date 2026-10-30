@@ -150,6 +150,30 @@ transaction. Edges are never deleted; the closed row keeps its window and `quipu
 it `"live": false`. `quipu audit` reports any superseded entry whose edge is still live, which is
 the shape a vault written by an older quipu is in.
 
+### Project hubs: a view over the tag, not an edge per entry
+
+A real vault is mostly tag and very little graph — 891 entries and 3 edges is what the live one looked
+like, and 466 of those entries carried a project tag. The tempting fill is one `part_of` edge per entry,
+which means writing 466 edge specs into 466 markdown files, and `graph.rebuild` folds db edges back into
+the markdown on every reindex, so it would rewrite them forever. The tag is already the assertion and it
+is already in the markdown, so the hub is derived at read time instead:
+
+```bash
+quipu neighbors shitter      # entries tagged `shitter`, after the edges
+quipu timeline glitch        # the same view, dated by each entry's own creation
+```
+
+Nothing is written; `stats` reports `entries_with_an_edge` and `edges_by_predicate` so the gap is
+visible rather than assumed. Two rules keep the view honest: `unknown` is never a hub (it is a bucket,
+not a claim — 425 entries carry it), and `pruned` entries are left out unless you pass `--all`, because
+a browse surface that leads with rejected material teaches an agent to cite it. On the live vault that
+one rule took `neighbors shitter` from transcript-summary junk to 69 promoted entries first.
+
+A hub is a place to look, not a claim about how things relate. For those, assert a real predicate —
+`--edge` on the CLI, `edges` on `quipu_write` through the provider — and keep the vocabulary closed:
+`causes`, `depends_on`, `implements`, `supersedes`, `decided_against`, `measured_as`, `located_in`,
+`used_by`, `blocks`, `owned_by`, `part_of`, `contradicts`, `learned_from`.
+
 ## Repairing the summaries an older import mangled
 
 An import from before the frontmatter fix left 88 notes with a quoted, truncated summary. The repair reads
