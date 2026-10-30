@@ -4,6 +4,58 @@ Notable changes, newest first. Versions follow `0.x` while the format and the CL
 anything that changes a vault's on-disk shape gets an explicit note, because markdown is the source of
 truth and a migration is the user's data.
 
+## 0.4.0 — 2026-10-30
+
+The provider release. 0.3.0 made the labels trustworthy; this one puts the vault inside the agent instead
+of beside it. `memory.provider: quipu` in a Hermes profile now means recall and capture happen without
+anyone remembering to run a command.
+
+The through-line: **a memory provider is a contract, and the contract is cheap.** Recall is a BM25 search
+over the index the vault already keeps — 9 ms, no model call, works offline. Capture is one JSON line per
+turn, never an entry per turn. The prompt block is 27 tokens and carries no recalled text. Everything an
+agent writes still faces the same promotion gate as everything else, so the tool cannot mint a `promoted`
+entry any more than the importer can.
+
+Live corpus at the tag: 887 entries, 315 promoted, 3 graph edges, `audit` clean.
+
+### Added
+
+- **quipu is a packaged Hermes memory provider** (#10). A new `quipu/hermes_provider.py` implements the
+  `MemoryProvider` contract and registers through the `hermes_agent.memory_providers` entry point, so
+  `pip install` is the entire setup. Measured on the live vault: `prefetch()` 8.9 ms and 120 words
+  against a 400-token budget, `system_prompt_block()` 27 tokens, `queue_prefetch()` on a daemon thread.
+  `sync_turn()` appends `{ts, session, user, assistant}` to `<vault>/.quipu/session-<id>.jsonl` and
+  writes **no entries** — a provider that mints one entry per turn is the append-only failure this
+  project exists to fix. Tools `quipu_search` and `quipu_write` return JSON strings; an unknown tool, a
+  missing vault or a broken index degrades to an error object and never raises into the agent loop.
+
+- **The write tool exposes the promotion gate** (#79). `quipu_write` always wrote `state: raw`, so an
+  agent's knowledge was present, searchable, unpromotable and never exported. It now takes `importance`
+  and `state`, and promotion is decided by the same rule as everywhere else: evidence **and** importance
+  at or above `promote_threshold`. `state: promoted` without the grounds writes `raw` and says why in a
+  `note`; `state: pruned` is honoured, because pruning is a decision rather than a gate question. The
+  reply carries `{id, path, state, importance}`.
+
+- **`docs/HERMES.md`** — installing the provider, the two-line profile config, what each hook actually
+  does, the vault-resolution order (`QUIPU_VAULT`, then `<hermes_home>/quipu-vault`, then
+  `~/quipu-vault`), the session journal, and how to measure recall from both sides. `docs/USING.md` gains
+  the same section from the CLI side.
+
+### Fixed
+
+- **The provider entry point names a package, not a module** (#80). Hermes resolves a provider's
+  directory from its entry point *without importing it*, so `quipu.hermes_provider:register` resolved to a
+  module origin, returned no directory, and the provider read as **not installed** while being installed
+  correctly — every session logged `configured but not installed` and ran with no recall. The entry point
+  is now `quipu:register`, with a thin re-export in `quipu/__init__.py`, and
+  `tests/test_provider_entry_point.py` pins the packaging contract so it cannot regress silently.
+
+- **Nineteen junk entries removed and twenty-seven summary repairs in the live vault.** Nine
+  `PONG <your model>` probe captures and two raw task prompts were quarantined to
+  `quarantine-20261030/`; six entries imported with `summary: ""` (invisible to every search) and
+  twenty-one whose summary was a JSON blob got statements derived from their bodies. Filed as #77: the
+  write boundary should refuse a summary that is not prose, rather than accept it and bury the entry.
+
 ## 0.3.0 — 2026-10-29
 
 The gate release. 0.2.0-alpha proved quipu could be used; this one makes its labels and its edges

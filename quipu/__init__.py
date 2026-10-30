@@ -4,7 +4,7 @@ Verbatim capture, a temporal knowledge graph, and lifecycle-labeled training dat
 The vault is plain markdown (Obsidian-compatible); the index and graph live in SQLite.
 """
 
-__version__ = "0.3.0"
+__version__ = "0.4.0"
 
 KINDS = ("capture", "conclusion", "decision", "lesson", "fact", "handoff", "question")
 STATES = ("raw", "promoted", "pruned")
