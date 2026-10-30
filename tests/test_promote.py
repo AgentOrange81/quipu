@@ -88,7 +88,8 @@ def test_a_proposal_with_a_blob_summary_takes_the_body_statement(cfg):
     blob["summary"] = '{"findings": [{"claim": "the lightbox lives in HistoryPage"}]}'
     blob["body"] = "The lightbox is rendered in HistoryPage.tsx around line 106, with an onClick handler."
     written = promote_mod.apply(promote_mod.parse_response(json.dumps({"entries": [blob]})), cfg)
-    assert written[0].summary == "The lightbox is rendered in HistoryPage.tsx around line 106, with an onClick handler."
+    assert written[0].summary == (
+        "The lightbox is rendered in HistoryPage.tsx around line 106, with an onClick handler.")
 
 
 def test_a_blob_proposal_with_no_prose_body_keeps_the_entry(cfg):
