@@ -349,6 +349,26 @@ with the warning); a 14 KB transcript hit the endpoint's own 120 s read timeout 
 with `reflection failed: TimeoutError: timed out` and no partial entry. Chunking a long transcript is
 #2, not something the hook should guess at.
 
+## The provider path: quipu inside Hermes
+
+Everything above is the explicit path: the agent is told to search, told to write, and told to run
+the hook at the end of a session. That works, and it depends on the agent remembering to do it —
+the vault is only as good as the discipline behind it.
+
+Hermes can also drive quipu directly, as a memory provider: `memory.provider: quipu` in the
+profile's `config.yaml`. The provider then searches the vault before each answer on its own, and
+appends the turns to a session journal under `.quipu/`. Two tools appear in the agent's tool list,
+`quipu_search` and `quipu_write`, for the times the agent wants to reach further than the recall
+budget allows.
+
+What the provider deliberately does **not** do is write an entry per turn. The journal is a
+transcript; entries still come from the promotion pass — `quipu reflect`, `quipu hook`, or an
+explicit `quipu write` — and they clear the same gate either way. The append-only failure this
+project exists to stop is not something the provider introduces on a new path.
+
+[HERMES.md](HERMES.md) has the install, the vault lookup order, the token budgets and the failure
+modes.
+
 ## A transcript too long for one prompt
 
 A real session does not fit in one prompt, and pretending it does fails quietly or loudly depending on the
