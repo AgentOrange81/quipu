@@ -368,6 +368,12 @@ a non-integer is refused with an error naming `llm.timeout`.
 timeout = 240
 ```
 
+Size `--max-chars` from the measurement rather than from hope: a 3 KB chunk takes roughly 100 s on the
+local 35B, so the default 120 s cap fits about one 3 KB chunk and a 300 s cap about 8–10 KB. Raise
+`--endpoint-timeout` when a chunk is slow; raise `hook --timeout` (or shrink `--max-chars`) when the pass
+as a whole runs long. Both have to be sized together — a pass of eight chunks at 240 s each still needs a
+budget larger than 240 s.
+
 ## Exporting
 
 | command | when you want it | what each record carries |
