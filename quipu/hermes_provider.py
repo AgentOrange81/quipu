@@ -123,7 +123,16 @@ WRITE_SCHEMA = _schema(
                                    "the vault's promote_threshold, the entry is written promoted."},
      "state": {"type": "string", "enum": ["raw", "promoted", "pruned"],
                "description": "Optional. Omit to let the evidence+importance gate decide; "
-                              "'promoted' is refused (written raw) when evidence is missing."}},
+                              "'promoted' is refused (written raw) when evidence is missing."},
+     "supersedes": {"type": "array", "items": {"type": "string"},
+                    "description": "Optional entry ids this entry corrects. Their edge windows close, "
+                                   "so a rebuild reproduces history instead of resurrecting it."},
+     "edges": {"type": "array", "items": {"type": "string"},
+               "description": "Optional graph edges as src:predicate:dst. Predicates are a CLOSED "
+                              "vocabulary (causes, depends_on, implements, supersedes, "
+                              "decided_against, measured_as, located_in, used_by, blocks, owned_by, "
+                              "part_of, contradicts, learned_from) — an invented predicate "
+                              "is reported in skipped_edges, never silently accepted."}},
     ["summary", "evidence"],
 )
 
@@ -371,8 +380,11 @@ class QuipuMemoryProvider(MemoryProvider):
             state = "promoted" if eligible else "raw"
         payload["state"] = state
         result = mcp_mod._write(cfg, payload)
+        # The graph is unreachable from the surface agents actually write through unless the tool
+        # carries edges, and the closed vocabulary is what keeps an invented predicate out (#84).
         out = {"id": result["id"], "path": result["path"], "state": state,
-               "importance": importance}
+               "importance": importance, "skipped_edges": result.get("skipped_edges") or [],
+               "closed_edges": result.get("closed_edges") or []}
         if requested == "promoted" and state != "promoted":
             out["note"] = (
                 f"written raw, not promoted: promotion needs evidence and importance >= "
