@@ -103,21 +103,48 @@ _ISO_Z_RE = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$")
 
 @dataclass
 class ImportResult:
-    """What an import did: the entries it wrote, the noise it skipped, the counts."""
+    """What an import did: the entries it wrote, the noise it skipped, the counts.
+
+    `skipped` carries a reason with every path. A bare integer could not tell "noise we meant to
+    drop" from "we could not parse this file", and the difference is the whole point of the report
+    (#17). `directories_ignored` is the other half: the importer reads the top level only, so the
+    subdirectories it walked past are named with the number of markdown files each holds.
+    """
 
     written: list[Entry] = field(default_factory=list)
-    skipped: list[Path] = field(default_factory=list)
+    skipped: list[tuple[Path, str]] = field(default_factory=list)
+    directories_ignored: dict[str, int] = field(default_factory=dict)
     by_kind: dict[str, int] = field(default_factory=dict)
     by_state: dict[str, int] = field(default_factory=dict)
 
 
+#: The fixed vocabulary of skip reasons. The report is consumed by people and by scripts, so the
+#: strings are stable and exhaustive rather than free-form prose at each call site.
+SKIP_IGNORED_NAME = "ignored name"
+SKIP_EMPTY_BODY = "empty body"
+SKIP_NO_TYPE = "no type"
+SKIP_UNPARSABLE = "unparsable frontmatter"
+SKIP_NOISE = "noise (training_value: low)"
+
+#: Subdirectories a fabric corpus keeps scaffolding in. `--recurse` walks past the top level, and
+#: these are the trees it must still refuse: stubs, duplicates, hub notes and templates are not
+#: entries, and importing 4,635 of them would bury the corpus that is (#17).
+DEFAULT_SKIP_DIRS = frozenset({
+    "_dupes", "_stubs", "_meta", "templates", ".obsidian", "assets",
+})
+
+
 def import_fabric(src_dir: str | Path, vault_root: str | Path, *,
                   dry_run: bool = False, include_noise: bool = False,
-                  promote_threshold: float = DEFAULT_PROMOTE_THRESHOLD) -> ImportResult:
+                  promote_threshold: float = DEFAULT_PROMOTE_THRESHOLD,
+                  recurse: bool = False,
+                  skip_dirs: frozenset[str] | set[str] | None = None) -> ImportResult:
     """Convert a fabric corpus into quipu entries under `vault_root`.
 
-    Only the files directly in `src_dir` are considered -- a corpus keeps its stubs and
-    duplicates in sibling directories, and those are not what an import is for.
+    Only the files directly in `src_dir` are considered by default -- a corpus keeps its stubs and
+    duplicates in sibling directories, and those are not what an import is for. `recurse=True`
+    walks the whole tree instead and refuses `skip_dirs` (defaulting to `DEFAULT_SKIP_DIRS`), so a
+    corpus with a different shape can be imported without a code change.
 
     `promote_threshold` is quipu's own promotion gate: an entry is promoted only when its
     importance clears it AND it carries evidence - the same gate promote.py applies. Without it
@@ -128,16 +155,36 @@ def import_fabric(src_dir: str | Path, vault_root: str | Path, *,
     if not src.is_dir():
         raise NotADirectoryError(f"not a directory: {src}")
 
+    skip = DEFAULT_SKIP_DIRS if skip_dirs is None else frozenset(skip_dirs)
     result = ImportResult()
     files = []
-    for path in sorted(src.glob("*.md")):
+    candidates = src.rglob("*.md") if recurse else src.glob("*.md")
+    for path in sorted(candidates):
+        rel_parts = path.relative_to(src).parts
+        if recurse and rel_parts and rel_parts[0] in skip:
+            continue  # scaffolding under --recurse: not candidates, so not skips either
         if path.name in IGNORED_NAMES:
+            result.skipped.append((path, SKIP_IGNORED_NAME))
             continue
         text = path.read_text(encoding="utf-8", errors="replace")
         fm, body = _split_frontmatter(text)
         if fm is None:
-            continue  # not a fabric entry (dashboard, notes, ...)
+            # not a fabric entry: a dashboard, a notes file, a truncated write
+            result.skipped.append((path, SKIP_UNPARSABLE))
+            continue
         files.append((path, fm, body))
+
+    # The policy is top-level only by default, and the report has to say what that policy left
+    # behind: every direct subdirectory holding at least one markdown file, counted at any depth,
+    # so `_stubs/` with 4080 files cannot hide behind a silent zero. Under --recurse those files
+    # are candidates (minus the skipped trees), so there is nothing to leave behind.
+    if not recurse:
+        for child in sorted(src.iterdir()):
+            if not child.is_dir() or child.name in IGNORED_NAMES or child.name.startswith("."):
+                continue
+            count = sum(1 for _ in child.rglob("*.md"))
+            if count:
+                result.directories_ignored[child.name] = count
 
     claimed: dict[str, str] = {}
     for path, fm, _body in files:
@@ -150,8 +197,19 @@ def import_fabric(src_dir: str | Path, vault_root: str | Path, *,
         rel = path.relative_to(src).as_posix()
         ftype = _scalar(fm.get("type"))
         training_value = _scalar(fm.get("training_value")).lower()
+        if not ftype.strip():
+            # a note with no `type` has no kind the reader can trust; importing it as a default
+            # would invent one (#17)
+            result.skipped.append((path, SKIP_NO_TYPE))
+            continue
+        # A duplicate id is not a skip: `_entry_id` gives the second claimant a stable hash of its
+        # own path, because dropping a file whose id a neighbour already took loses data for the
+        # sake of a tidier report. The id is the corpus's; the file is still ours.
+        if not body.strip():
+            result.skipped.append((path, SKIP_EMPTY_BODY))
+            continue
         if ftype.lower() in NOISE_TYPES and training_value == "low" and not include_noise:
-            result.skipped.append(path)
+            result.skipped.append((path, SKIP_NOISE))
             continue
         kind = KIND_BY_TYPE.get(ftype.lower(), DEFAULT_KIND)
         summary = _scalar(fm.get("summary"))

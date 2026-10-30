@@ -49,6 +49,37 @@ vault so an old archive becomes recallable through the same `search` / `timeline
 with a `pruned:low-training-value` tag, never as promoted; `--include-noise` imports them instead
 of skipping them.
 
+## What the import reads, and what it leaves behind
+
+The importer reads **top-level `*.md` only**, on purpose: a corpus keeps its stubs and duplicates
+in sibling directories, and those are not what an import is for. The report makes that policy
+visible instead of leaving it implicit — `directories_ignored` says what the policy left behind,
+counting markdown files in each ignored subdirectory at any depth, and `skipped_by_reason` says
+why each file was skipped: `ignored name`, `empty body`, `no type`, `unparsable frontmatter`,
+`noise (training_value: low)`.
+
+The shape of a report, quoting a real run over the archived corpus:
+
+```json
+{"written": 846, "skipped": 19,
+ "skipped_by_reason": {"ignored name": 1, "noise (training_value: low)": 16,
+                       "unparsable frontmatter": 2},
+ "directories_ignored": {"_dupes": 481, "_meta": 1, "_stubs": 4080, "daily": 66, "templates": 7},
+ "by_kind": {"decision": 556, "conclusion": 177, "capture": 96, "handoff": 17},
+ "by_state": {"promoted": 277, "raw": 512, "pruned": 57}}
+```
+
+Since #26 an entry that claims `training_value: high` is promoted only if it also carries
+evidence — the rest arrive `raw` and tagged `import:no-evidence`. A label inherited from another
+system is a claim, and the import applies the same gate `promote.py` applies before agreeing
+with it.
+
+A corpus that keeps its entries deeper than one level can be imported with `--recurse`, which
+refuses `_dupes`, `_stubs`, `_meta`, `templates`, `.obsidian` and `assets` by default; `--skip-dir`
+replaces that list and can be repeated. A duplicate id is not a skip: the second file sharing one
+keeps a stable id derived from its path, because dropping a file a neighbour already named loses
+data for the sake of a tidier report.
+
 ## What makes an entry worth promoting
 
 The gate is one line, in `quipu/promote.py`:
