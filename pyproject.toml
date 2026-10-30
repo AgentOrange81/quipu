@@ -27,7 +27,7 @@ dev = ["pytest>=8", "ruff>=0.5", "build>=1.2"]
 quipu = "quipu.cli:main"
 
 [project.entry-points."hermes_agent.memory_providers"]
-quipu = "quipu.hermes_provider:register"
+quipu = "quipu:register"
 
 [tool.hatch.build.targets.wheel]
 packages = ["quipu"]

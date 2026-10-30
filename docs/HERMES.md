@@ -17,7 +17,7 @@ into the profile. The entry point lives in the distribution's `pyproject.toml`:
 
 ```toml
 [project.entry-points."hermes_agent.memory_providers"]
-quipu = "quipu.hermes_provider:register"
+quipu = "quipu:register"
 ```
 
 Install the released wheel — there is no PyPI publish step; the release workflow attaches the

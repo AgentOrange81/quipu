@@ -14,3 +14,16 @@ DEFAULT_PREDICATES = (
     "measured_as", "located_in", "used_by", "blocks", "owned_by", "part_of",
     "contradicts", "learned_from",
 )
+
+
+def register(ctx):
+    """Hermes memory-provider entry point.
+
+    Deliberately a re-export rather than the implementation: Hermes resolves a provider's package
+    directory from the entry point WITHOUT importing it, and only a package ``__init__`` yields
+    one. Pointing the entry point at ``quipu.hermes_provider`` (a bare module) made a correctly
+    installed provider read as "configured but not installed".
+    """
+    from quipu.hermes_provider import register as _register
+
+    return _register(ctx)
