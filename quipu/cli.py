@@ -364,6 +364,11 @@ def cmd_neighbors(args) -> int:
     for r in out.get("entries") or []:
         # the project-hub view (#85): the tag is the assertion, so these are entries, not edges
         print(f"entry {r['id']}  {r['state']:<8} {r['kind']:<10} {r['summary'][:88]}")
+    cit = out.get("citations") or {}
+    for i in cit.get("cites") or []:
+        print(f"cites {i}")
+    for i in cit.get("cited_by") or []:
+        print(f"cited-by {i}")
     return 0
 
 
@@ -450,6 +455,12 @@ def cmd_audit(args) -> int:
     # a superseded entry whose belief is still live is the exact failure #20 produced: two live
     # windows for one fact, and the stale claim looks as current as the correction. The write path
     # closes it now; this line is what says so out loud when a vault was written by an older one.
+    for r in rows:
+        if r["predicate"] not in cfg.predicates:
+            # a predicate outside the closed vocabulary is how a graph rots into 400 spellings of
+            # "uses" (#85): report it once per edge, live or closed, because the markdown keeps both
+            problems.append(f"edge {r['id']} ({r['src']} -{r['predicate']}-> {r['dst']}): predicate "
+                            f"{r['predicate']!r} is outside the closed vocabulary")
     live_notes = {r["note_id"] for r in rows if r["valid_to"] is None and r["note_id"]}
     for e in entries.values():
         for old in e.supersedes:
