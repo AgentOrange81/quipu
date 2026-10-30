@@ -18,7 +18,7 @@ from . import KINDS
 from .config import Config
 from .graph import add_edge, close_superseded, ensure_entity
 from .index import connect
-from .store import Entry, check_summary, first_prose_line, format_edge_spec, write_entry
+from .store import Entry, check_summary, first_prose_line, format_edge_spec, looks_like_blob, write_entry
 
 PROMPT_PATH = Path(__file__).resolve().parent.parent / "prompts" / "promote.md"
 
@@ -339,6 +339,24 @@ def reflect(transcript: str, cfg: Config, provider, existing: list[str] | None =
     return parse_response(provider.complete(build_prompt(transcript, cfg, existing)))
 
 
+def _prose_handle(summary: str, body: str) -> str:
+    """The summary as a usable handle: quotes stripped, a blob replaced by the body's first statement.
+
+    A proposal is a model's guess at what the transcript said, so the field can arrive in any shape.
+    Losing the entry over a mis-shaped handle would be the wrong trade — the body is right there and
+    the statement can be recovered from it — but writing a blob or a quoted-and-truncated scalar means
+    the entry ranks on text nobody can read, which is what #77 and #54 are about.
+    """
+    text = (summary or "").strip()
+    if len(text) >= 2 and text[0] == text[-1] and text[0] in "'\"":
+        text = text[1:-1].strip()
+    if looks_like_blob(text):
+        derived = first_prose_line(body)
+        if derived:
+            return derived
+    return text
+
+
 def apply(proposals: list[Proposal], cfg: Config, agent: str = "", project: str = "",
           session: str = "", source: str = "") -> list[Entry]:
     """Write proposals, gated by the promotion threshold.
@@ -348,6 +366,10 @@ def apply(proposals: list[Proposal], cfg: Config, agent: str = "", project: str 
     """
     written: list[Entry] = []
     for p in proposals:
+        # the model is a caller like any other, so the handle rule applies here too (#77, #85): a
+        # measured run over a real transcript emitted a summary starting with a quote, and this path
+        # wrote it straight through because only the CLI and the importer checked the shape.
+        p.summary = _prose_handle(p.summary, p.body)
         promoted = p.importance >= cfg.promote_threshold and bool(p.evidence)
         # the entry that asserted an edge records it, so the graph survives a lost db (#24).
         # A raw proposal never enters the graph, so it carries no edges either.

@@ -73,3 +73,30 @@ def test_record_capture_is_raw_and_searchable(cfg):
 def test_capture_with_empty_summary_still_writes(cfg):
     e = promote_mod.record_capture(cfg, "x")
     assert any(x.id == e.id for _p, x in iter_entries(cfg.root))
+
+
+def test_a_proposal_with_a_quoted_summary_is_written_as_a_handle(cfg):
+    """A measured reflect run emitted exactly this shape and it went straight to disk (#85)."""
+    quoted = dict(GOOD[0])
+    quoted["summary"] = '"' + GOOD[0]["summary"] + '"'
+    written = promote_mod.apply(promote_mod.parse_response(json.dumps({"entries": [quoted]})), cfg)
+    assert written[0].summary == GOOD[0]["summary"]
+
+
+def test_a_proposal_with_a_blob_summary_takes_the_body_statement(cfg):
+    blob = dict(GOOD[0])
+    blob["summary"] = '{"findings": [{"claim": "the lightbox lives in HistoryPage"}]}'
+    blob["body"] = "The lightbox is rendered in HistoryPage.tsx around line 106, with an onClick handler."
+    written = promote_mod.apply(promote_mod.parse_response(json.dumps({"entries": [blob]})), cfg)
+    assert written[0].summary == (
+        "The lightbox is rendered in HistoryPage.tsx around line 106, with an onClick handler.")
+
+
+def test_a_blob_proposal_with_no_prose_body_keeps_the_entry(cfg):
+    """The body has no statement either, so the entry survives with the text it arrived with: a
+    mis-shaped handle costs the handle, never the memory."""
+    blob = dict(GOOD[0])
+    blob["summary"] = '{"findings": []}'
+    blob["body"] = '{"other": 1}'
+    written = promote_mod.apply(promote_mod.parse_response(json.dumps({"entries": [blob]})), cfg)
+    assert written[0].summary == '{"findings": []}'
