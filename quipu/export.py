@@ -118,6 +118,8 @@ def dataset_report(cfg: Config) -> dict:
     live = c.execute("SELECT count(*) FROM edges WHERE valid_to IS NULL").fetchone()[0]
     closed = c.execute("SELECT count(*) FROM edges WHERE valid_to IS NOT NULL").fetchone()[0]
     c.close()
+    from . import graph as graph_mod  # local import: graph imports index, so a top-level one cycles
+    graph_report = graph_mod.connectivity(cfg)
     return {
         "entries": len(entries),
         "promoted": len(promoted),
@@ -128,5 +130,9 @@ def dataset_report(cfg: Config) -> dict:
         "preference_pairs": pairs,
         "edges_live": live,
         "edges_closed": closed,
+        "edges_by_predicate": graph_report["edges_by_predicate"],
+        "graph_nodes": graph_report["nodes"],
+        "entries_with_an_edge": graph_report["entries_with_an_edge"],
+        "projects": graph_report["projects"],
         "promotion_rate": round(len(promoted) / len(entries), 3) if entries else 0.0,
     }

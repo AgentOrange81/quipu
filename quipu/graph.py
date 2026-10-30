@@ -433,8 +433,64 @@ def timeline(cfg: Config, entity: str, at: str | None = None) -> list[dict]:
     return [dict(r) for r in rows]
 
 
-def neighbors(cfg: Config, entity: str, depth: int = 1) -> dict:
-    """BFS over live edges. Returns {"nodes": [...], "edges": [...]}."""
+def project_entries(cfg: Config, name: str, include_pruned: bool = False) -> list[dict]:
+    """Entries tagged with a project, as a hub view over the graph (#85).
+
+    A project hub could be 466 persisted edges, one per tagged entry, written into 466 markdown
+    files — and then `rebuild` would fold them back and forth, because the db is derived. The tag IS
+    the assertion and it is already in the markdown, so the hub is a VIEW: entries whose `project`
+    matches by identity (so "Shitter" and "shitter" are one hub), no writes, no duplication, nothing
+    to keep in sync. It answers the question the persisted edges were for — everything about a
+    project — and it cannot drift, because there is nothing to drift from.
+
+    `pruned` entries are left out unless asked for: pruning is the vault's decision that something is
+    not knowledge, and a browse surface that leads with rejected material teaches an agent to cite it.
+    `include_pruned=True` is for audit work, not for recall.
+    """
+    key = identity(name)
+    if not key or key == identity("unknown"):
+        return []
+    rows = []
+    for _path, e in iter_entries(cfg.root):
+        if not include_pruned and e.state == "pruned":
+            continue
+        if e.project and identity(e.project) == key:
+            rows.append({"id": e.id, "summary": e.summary, "state": e.state, "kind": e.kind,
+                         "created": e.created})
+    rows.sort(key=lambda r: (r["created"] or "", r["id"]))
+    return rows
+
+
+def connectivity(cfg: Config) -> dict:
+    """How much of the corpus the graph actually reaches — the number #85 was filed on."""
+    c = connect(cfg.db_path)
+    try:
+        by_predicate = {r["predicate"]: r["n"] for r in c.execute(
+            "SELECT predicate, count(*) AS n FROM edges WHERE valid_to IS NULL "
+            "GROUP BY predicate ORDER BY n DESC").fetchall()}
+        names = {r[0] for r in c.execute(
+            "SELECT src FROM edges WHERE valid_to IS NULL UNION SELECT dst FROM edges "
+            "WHERE valid_to IS NULL").fetchall()}
+        notes = {r[0] for r in c.execute(
+            "SELECT note_id FROM edges WHERE valid_to IS NULL "
+            "AND note_id IS NOT NULL AND note_id != ''").fetchall()}
+    finally:
+        c.close()
+    entries = [e for _p, e in iter_entries(cfg.root)]
+    projects: dict[str, int] = {}
+    for e in entries:
+        if e.project and identity(e.project) != identity("unknown"):
+            projects[e.project] = projects.get(e.project, 0) + 1
+    return {"edges_by_predicate": by_predicate, "nodes": len(names),
+            "entries_with_an_edge": len(notes), "entries": len(entries),
+            "projects": dict(sorted(projects.items(), key=lambda kv: -kv[1])[:10])}
+
+
+def neighbors(cfg: Config, entity: str, depth: int = 1, include_pruned: bool = False) -> dict:
+    """BFS over live edges. Returns {"nodes": [...], "edges": [...], "entries": [...]}.
+
+    `entries` is the project-hub view (#85) and is empty for an entity that is not a project tag.
+    """
     entity = resolve(cfg, entity)
     seen = {entity}
     edges: list[dict] = []
@@ -457,7 +513,8 @@ def neighbors(cfg: Config, entity: str, depth: int = 1) -> dict:
         frontier = nxt
     ents = {r["name"]: dict(r) for r in c.execute("SELECT * FROM entities").fetchall()}
     c.close()
-    return {"nodes": [ents.get(n, {"name": n}) for n in seen], "edges": edges}
+    return {"nodes": [ents.get(n, {"name": n}) for n in seen], "edges": edges,
+            "entries": project_entries(cfg, entity, include_pruned=include_pruned)}
 
 
 def materialize(cfg: Config) -> int:

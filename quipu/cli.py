@@ -341,12 +341,19 @@ def cmd_timeline(args) -> int:
     for r in rows:
         end = r["valid_to"] or "now"
         print(f"{r['id']:>4} {r['valid_from'][:19]} → {end[:19]}  {r['src']} -{r['predicate']}-> {r['dst']}")
-    return 0 if rows else 1
+    hub = graph_mod.project_entries(cfg, args.entity,
+                                    include_pruned=getattr(args, "all_states", False))
+    for r in hub:
+        # the project-hub view (#85): dated by the entry's own creation, which is the only instant
+        # the markdown records
+        print(f"     {(r['created'] or '')[:19]}  entry {r['id']}  {r['summary'][:88]}")
+    return 0 if (rows or hub) else 1
 
 
 def cmd_neighbors(args) -> int:
     cfg = _cfg(args)
-    out = graph_mod.neighbors(cfg, args.entity, depth=args.depth)
+    out = graph_mod.neighbors(cfg, args.entity, depth=args.depth,
+                              include_pruned=getattr(args, "all_states", False))
     if args.json:
         print(json.dumps(out, indent=2, ensure_ascii=False))
         return 0
@@ -354,6 +361,9 @@ def cmd_neighbors(args) -> int:
         print(f"node  {n['name']}")
     for e in out["edges"]:
         print(f"edge  {e['src']} -{e['predicate']}-> {e['dst']}")
+    for r in out.get("entries") or []:
+        # the project-hub view (#85): the tag is the assertion, so these are entries, not edges
+        print(f"entry {r['id']}  {r['state']:<8} {r['kind']:<10} {r['summary'][:88]}")
     return 0
 
 
@@ -771,11 +781,15 @@ def build_parser() -> argparse.ArgumentParser:
     s = add("timeline", "an entity's edges, optionally as of a date", cmd_timeline)
     s.add_argument("entity")
     s.add_argument("--at", default=None)
+    s.add_argument("--all", dest="all_states", action="store_true",
+                   help="include pruned entries in the project-hub view")
 
     s = add("neighbors", "graph neighbourhood", cmd_neighbors)
     s.add_argument("entity")
     s.add_argument("--depth", type=int, default=1)
     s.add_argument("--json", action="store_true")
+    s.add_argument("--all", dest="all_states", action="store_true",
+                   help="include pruned entries in the project-hub view (audit work, not recall)")
 
     s = add("export", "write a dataset", cmd_export)
     s.add_argument("which", choices=("sft", "dpo", "graph"))
