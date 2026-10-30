@@ -8,6 +8,9 @@ turns the memory's own lifecycle into labelled training data.
 
 ```bash
 pip install -e ".[dev]"        # or: uv sync
+# or the released wheel, without a checkout:
+#   pip install https://github.com/AgentOrange81/quipu/releases/download/v0.3.0/quipu-0.3.0-py3-none-any.whl
+quipu --version
 quipu --vault ~/memory init
 quipu --vault ~/memory capture "the 3600 DOCP config threw 649 CCEs in one boot" --project wraith
 quipu --vault ~/memory write --kind decision --state promoted \
