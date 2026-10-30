@@ -461,6 +461,34 @@ def project_entries(cfg: Config, name: str, include_pruned: bool = False) -> lis
     return rows
 
 
+#: An entry id is 8 hex characters, and it is how one entry points at another in its own prose.
+_ENTRY_ID_RE = re.compile(r"\b([0-9a-f]{8})\b")
+
+
+def citations(cfg: Config, entry_id: str) -> dict:
+    """Which entries this one cites, and which cite it — derived, never persisted (#85, option 2).
+
+    A citation is an observation about the text, not additional knowledge: `[[e2314ae5]]` in a body is
+    reproducible from that body forever, so writing it as an edge would duplicate a derivable fact into
+    markdown that `rebuild` then re-folds. The view answers the question the edges were for — what else
+    in the vault points at this — and it cannot drift.
+    """
+    entries = [(p, e) for p, e in iter_entries(cfg.root)]
+    known = {e.id for _p, e in entries}
+    cites: list[str] = []
+    cited_by: list[str] = []
+    for _path, e in entries:
+        text = (e.body or "") + " " + (e.summary or "") + " " + " ".join(e.edges or [])
+        refs = {m for m in _ENTRY_ID_RE.findall(text) if m in known and m != e.id}
+        if not refs:
+            continue
+        if e.id == entry_id:
+            cites = sorted(refs)
+        elif entry_id in refs:
+            cited_by.append(e.id)
+    return {"entry": entry_id, "cites": cites, "cited_by": sorted(cited_by)}
+
+
 def connectivity(cfg: Config) -> dict:
     """How much of the corpus the graph actually reaches — the number #85 was filed on."""
     c = connect(cfg.db_path)
@@ -513,8 +541,13 @@ def neighbors(cfg: Config, entity: str, depth: int = 1, include_pruned: bool = F
         frontier = nxt
     ents = {r["name"]: dict(r) for r in c.execute("SELECT * FROM entities").fetchall()}
     c.close()
+    # an entry id is also a node worth asking about: what cites it, and what it cites (#85)
+    known_ids = {e.id for _p, e in iter_entries(cfg.root)}
+    cites = citations(cfg, entity) if entity in known_ids else {"entry": entity, "cites": [],
+                                                               "cited_by": []}
     return {"nodes": [ents.get(n, {"name": n}) for n in seen], "edges": edges,
-            "entries": project_entries(cfg, entity, include_pruned=include_pruned)}
+            "entries": project_entries(cfg, entity, include_pruned=include_pruned),
+            "citations": cites}
 
 
 def materialize(cfg: Config) -> int:
