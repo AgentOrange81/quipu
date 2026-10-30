@@ -4,6 +4,61 @@ Notable changes, newest first. Versions follow `0.x` while the format and the CL
 anything that changes a vault's on-disk shape gets an explicit note, because markdown is the source of
 truth and a migration is the user's data.
 
+## 0.5.0 — 2026-10-31
+
+The graph release. 0.4.0 put the vault inside the agent; this one makes the relations between what is
+in it reachable — without inventing an edge the corpus does not support.
+
+The through-line: **the graph was empty because it was unreachable, not because it was useless.** The
+live vault held 892 entries and 3 edges. Two of those three problems were plumbing, one was a
+temptation.
+
+### Added
+
+- **the provider can assert edges, not just nodes** (#84). `quipu_write` gained `edges`
+  (`src:predicate:dst`) and `supersedes`, and its schema names the closed predicate vocabulary — a model
+  that can see the boundary is less likely to invent past it, and an invented predicate is reported in
+  `skipped_edges` instead of written. This was the whole reason the graph stood still: `quipu write
+  --edge` and MCP `_write` both carried an edge, but the surface the team actually writes through
+  (`memory.provider: quipu`) did not, so a night of three agents capturing knowledge produced 0 relations.
+- **project hubs** (#85, first slice). `quipu neighbors <project>` and `quipu timeline <project>` now
+  carry the entries tagged with that project. Derived at read time from the tag, not persisted as one
+  `part_of` edge per entry — the tag is already the assertion and already in the markdown, and
+  `graph.rebuild` re-folds db edges back into the markdown on every reindex, so persisting would rewrite
+  466 files forever to restate them. Live: `neighbors shitter` returns 69 promoted entries.
+- **citations** (#85, second slice). `quipu neighbors <entry-id>` reports what that entry cites and what
+  cites it, resolved against ids the corpus actually has. Also derived, for the same reason: a citation
+  is reproducible from the body that makes it.
+- **`audit` reports an off-vocabulary predicate** — one line per edge, live and closed. The vocabulary is
+  closed per vault (`.quipu/config.toml` extends the defaults) and until now nothing said so when an edge
+  arrived outside it.
+- **`stats` reports graph connectivity** — `edges_by_predicate`, `graph_nodes`, `entries_with_an_edge`,
+  and the top project hubs, so the gap between "has knowledge" and "has relations" is visible instead of
+  assumed.
+
+### Fixed
+
+- **a summary must be prose** (#77). `write`, `capture` and the fabric importer all accepted a summary
+  that opened with `{`, `[` or a code fence; a blob's tokens rank exactly as well as prose's, so 21
+  entries on the live vault were competing for a 400-token recall budget with text no agent could read.
+  The write boundary now refuses the shape (exit 2, `--allow-summary-blob` to override), `capture` takes
+  the first *prose* line and keeps the blob in the body, the importer derives one from the body and
+  refuses only when there is no prose at all, and `audit` reports anything that got in before the rule.
+  Live: 19 flagged handles repaired, `audit` clean.
+
+### Notes
+
+- Two rules keep the derived views honest, both learned from the live corpus: `unknown` is never a hub
+  (425 entries carry it — it is a bucket, not a claim), and `pruned` entries are excluded from a hub
+  unless `--all` (a browse surface that leads with rejected material teaches an agent to cite it; the
+  first live `neighbors shitter` led with transcript-summary junk until this rule existed).
+- Still open on #85: `mentions` edges and reflection-derived semantics. The measurement that decides
+  them is whether a real reflection pass over a real transcript emits edges at all — the pass already
+  persists `edges` from promoted proposals and already refuses an unknown predicate without losing the
+  entry (`tests/test_promote.py`).
+
+Live corpus at the tag: 892 entries, 320 promoted, `audit` clean.
+
 ## 0.4.0 — 2026-10-30
 
 The provider release. 0.3.0 made the labels trustworthy; this one puts the vault inside the agent instead

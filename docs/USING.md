@@ -169,6 +169,21 @@ not a claim — 425 entries carry it), and `pruned` entries are left out unless 
 a browse surface that leads with rejected material teaches an agent to cite it. On the live vault that
 one rule took `neighbors shitter` from transcript-summary junk to 69 promoted entries first.
 
+### Citations: what points at this
+
+An entry that means something to another entry names it — `[[e2314ae5]]`, a supersedes link, the id in a
+note about a decision. That is a citation and it is derived the same way, because the body that makes it
+stays true forever:
+
+```bash
+quipu neighbors e2314ae5     # what this entry cites, and what cites it
+```
+
+An 8-hex word is only a citation if the corpus has that entry, so a short commit sha is not one. Nothing
+is written; `quipu audit` reports an edge whose predicate is outside the closed vocabulary (defaults plus
+whatever `.quipu/config.toml` adds), live or closed, because a graph rots into 400 spellings of "uses"
+quietly.
+
 A hub is a place to look, not a claim about how things relate. For those, assert a real predicate —
 `--edge` on the CLI, `edges` on `quipu_write` through the provider — and keep the vocabulary closed:
 `causes`, `depends_on`, `implements`, `supersedes`, `decided_against`, `measured_as`, `located_in`,
