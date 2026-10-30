@@ -4,6 +4,21 @@ Notable changes, newest first. Versions follow `0.x` while the format and the CL
 anything that changes a vault's on-disk shape gets an explicit note, because markdown is the source of
 truth and a migration is the user's data.
 
+## 0.5.2 — 2026-10-31
+
+### Fixed
+
+- **a real transcript now fits the default endpoint budget.** `[llm] timeout` defaulted to 120 s and one
+  request is one chunk: a 12-line slice of a Hermes session is 68 KB and a 185-line session is 509 KB, so
+  the reflection pass died on exactly the sessions it exists for — `LLM request failed: … TimeoutError:
+  timed out` — while a short `transcript.md` hid the problem completely. The default is 600 s, sized from
+  that measurement, and `HttpProvider`'s own default now reads the config constant instead of carrying a
+  second copy of the number.
+- **a timeout says which knob to turn.** The message now names how long it waited, that one chunk is one
+  request, and the three things a user can change (`--endpoint-timeout` / `[llm] timeout`, `--max-chars`,
+  a faster endpoint). A connection error keeps the plain message: chunk-size advice belongs on a timeout
+  only, and a test pins that so it cannot spread.
+
 ## 0.5.1 — 2026-10-31
 
 A patch on the 0.5.0 guards, and one measurement worth having.
