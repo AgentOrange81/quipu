@@ -446,6 +446,18 @@ def cmd_audit(args) -> int:
             # a blob where the handle belongs (#77): imported before the write boundary refused the
             # shape. `quipu reindex` keeps it searchable, so the audit is how it stays findable.
             problems.append(f"{e.id}: blob summary (re-import or rewrite as one sentence)")
+        for spec in e.edges:
+            # the markdown is what a rebuild replays, so the audit validates IT, not only the rows
+            # derived from it: a spec the replay refuses never reaches a row, and the old check
+            # therefore called the vault clean while three assertions were unqueryable (#98)
+            try:
+                _src, predicate, _dst = parse_edge_spec(spec)
+            except ValueError as exc:
+                problems.append(f"{e.id}: malformed edge spec {spec!r} ({exc})")
+                continue
+            if predicate not in cfg.predicates:
+                problems.append(f"{e.id}: edge predicate {predicate!r} is outside the closed "
+                                f"vocabulary ({spec!r}; add it to {cfg.config_path})")
         if e.summary[:1] in ("'", '"'):
             # an imported-and-quoted summary (#54): the importer keeps the markdown verbatim, so a
             # summary written as a YAML quoted scalar arrived with its quotes and often truncated at the

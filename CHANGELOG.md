@@ -28,6 +28,15 @@ truth and a migration is the user's data.
   them as orphans. All three surfaces now share `graph.carrier_entries()`, and `repair`'s post-apply
   recovery performs the same index + graph rebuild as `quipu reindex` instead of indexing alone.
 
+- **`audit` validates the markdown specs it stands on, and a four-part spec is malformed** (#98). `reindex`
+  prints one skip line per spec it cannot assert and keeps going — a broken claim must not cost the memory —
+  but `audit` then called the vault clean, because its predicate check read the `edges` table and a skipped
+  spec never reaches a row. On the live vault that hid three assertions. `audit` now parses and validates
+  every `edges:` spec in the frontmatter and reports it by entry id and spec, in the same vocabulary the
+  skip line uses. `parse_edge_spec` also stopped absorbing extra colons into `dst`: a four-part spec used to
+  parse "fine" into a claim nobody wrote and no writer could re-emit, and now it is refused at the write
+  boundary and reported as malformed by the replay.
+
 ### Known at this version
 
 - the live vault on this box still holds **4 index-only edges** until `quipu repair --edges --apply` is run
