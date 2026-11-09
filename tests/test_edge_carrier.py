@@ -69,8 +69,6 @@ def note_path(vault, eid) -> Path:
     return next((Path(vault) / "notes").glob(f"{eid}*.md"))
 
 
-@pytest.mark.xfail(strict=True, reason="#94: an unknown carrier is accepted; the markdown record "
-                                         "is dropped and the command exits 0")
 def test_an_unknown_carrier_is_refused_and_writes_nothing(vault):
     seed_entry(vault)
     proc = run_cli("--vault", str(vault), "edge", "quipu", "depends_on", "sqlite",
@@ -80,8 +78,6 @@ def test_an_unknown_carrier_is_refused_and_writes_nothing(vault):
     assert edge_rows(vault) == [], "a refused assertion must not land a row"
 
 
-@pytest.mark.xfail(strict=True, reason="#94: a contradiction validates its carrier after the old "
-                                         "edge is already closed")
 def test_a_contradiction_with_an_unknown_carrier_leaves_the_old_belief_live(vault):
     eid = seed_entry(vault)
     ok = run_cli("--vault", str(vault), "edge", "trx40", "measured_as", "docp-3600", "--note", eid)
@@ -97,8 +93,6 @@ def test_a_contradiction_with_an_unknown_carrier_leaves_the_old_belief_live(vaul
     assert "trx40:measured_as:docp-3600" in note_path(vault, eid).read_text()
 
 
-@pytest.mark.xfail(strict=True, reason="#94: there is no repair pass for an edge the markdown does "
-                                         "not record")
 def test_repair_edges_reports_a_db_only_edge_and_writes_nothing(vault):
     eid = seed_entry(vault)
     cfg = config_mod.load(vault)
@@ -112,8 +106,6 @@ def test_repair_edges_reports_a_db_only_edge_and_writes_nothing(vault):
     assert note_path(vault, eid).read_text() == before, "a dry run must not write"
 
 
-@pytest.mark.xfail(strict=True, reason="#94: re-homing a db-only edge into its src entry does not "
-                                         "exist")
 def test_repair_edges_apply_survives_a_rebuild(vault):
     eid = seed_entry(vault)
     cfg = config_mod.load(vault)
