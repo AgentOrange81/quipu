@@ -1,0 +1,130 @@
+"""An edge whose carrier names no entry is refused, and one already in the index is re-homed (#94).
+
+The defect: `graph.add_edge()` handed `note_id` straight to `record_edge()`, `find_entry()` found
+nothing, and that returned False with nobody told. `quipu edge` then printed the new id and exited 0,
+so the edge existed only in SQLite — `rm index.db` + `reindex` deleted a live belief while `audit`
+reported it and no write path did.
+
+Two properties, both from the invariants:
+
+1. a carrier that is GIVEN but does not resolve is a usage error that writes nothing — the db must be
+   unchanged after the refusal, not merely raise, and the old belief must stay live when the failing
+   call is a contradiction (closing first and validating after left an entity with no live edge at all);
+2. a vault already holding such an edge can be repaired from the edge's own `src`, which is the entry
+   that asserted it; the repair survives a rebuild, because the markdown is the truth.
+
+A carrier that is absent is a different case and stays allowed: `quipu edge a part_of b` with no
+`--note` warns on stderr, and the docs show that form.
+
+QA scope: tests/ only — the builder owns quipu/**.
+"""
+
+import json
+import sqlite3
+import subprocess
+import sys
+from pathlib import Path
+
+import pytest
+
+from quipu import config as config_mod
+from quipu import graph as graph_mod
+
+ASK = "why did the vault lose a live edge on reindex?"
+SUMMARY = "a live edge exists only in the index when its carrier names no entry"
+
+
+def run_cli(*args):
+    return subprocess.run([sys.executable, "-m", "quipu", *args], capture_output=True, text=True,
+                          timeout=60, stdin=subprocess.DEVNULL)
+
+
+@pytest.fixture()
+def vault(tmp_path):
+    v = tmp_path / "vault"
+    assert run_cli("--vault", str(v), "init").returncode == 0
+    return v
+
+
+def seed_entry(vault) -> str:
+    proc = run_cli("--vault", str(vault), "write", "--kind", "decision", "--state", "promoted",
+                   "--summary", SUMMARY, "--evidence", "audit: edges_not_in_markdown 4 of 8",
+                   "--ask", ASK, "--importance", "0.9")
+    assert proc.returncode == 0, proc.stderr
+    return Path(proc.stdout.strip()).name.split("-")[0]
+
+
+def edge_rows(vault):
+    """(id, src, predicate, dst, note_id, valid_to) for every edge, live or closed."""
+    c = sqlite3.connect(config_mod.load(vault).db_path)
+    c.row_factory = sqlite3.Row
+    try:
+        return [tuple(r) for r in c.execute(
+            "SELECT id, src, predicate, dst, note_id, valid_to FROM edges ORDER BY id")]
+    finally:
+        c.close()
+
+
+def note_path(vault, eid) -> Path:
+    return next((Path(vault) / "notes").glob(f"{eid}*.md"))
+
+
+@pytest.mark.xfail(strict=True, reason="#94: an unknown carrier is accepted; the markdown record "
+                                         "is dropped and the command exits 0")
+def test_an_unknown_carrier_is_refused_and_writes_nothing(vault):
+    seed_entry(vault)
+    proc = run_cli("--vault", str(vault), "edge", "quipu", "depends_on", "sqlite",
+                   "--note", "a summary sentence, not an entry id")
+    assert proc.returncode == 2, proc.stdout + proc.stderr
+    assert "a summary sentence, not an entry id" in proc.stderr
+    assert edge_rows(vault) == [], "a refused assertion must not land a row"
+
+
+@pytest.mark.xfail(strict=True, reason="#94: a contradiction validates its carrier after the old "
+                                         "edge is already closed")
+def test_a_contradiction_with_an_unknown_carrier_leaves_the_old_belief_live(vault):
+    eid = seed_entry(vault)
+    ok = run_cli("--vault", str(vault), "edge", "trx40", "measured_as", "docp-3600", "--note", eid)
+    assert ok.returncode == 0, ok.stderr
+    old = edge_rows(vault)[0][0]
+
+    proc = run_cli("--vault", str(vault), "contradict", str(old), "trx40", "measured_as", "docp-3200",
+                   "--note", "not an entry")
+    assert proc.returncode == 2, proc.stdout + proc.stderr
+    rows = edge_rows(vault)
+    assert len(rows) == 1, "a refused replacement must not open a second edge"
+    assert rows[0][5] is None, "the old belief must stay live"
+    assert "trx40:measured_as:docp-3600" in note_path(vault, eid).read_text()
+
+
+@pytest.mark.xfail(strict=True, reason="#94: there is no repair pass for an edge the markdown does "
+                                         "not record")
+def test_repair_edges_reports_a_db_only_edge_and_writes_nothing(vault):
+    eid = seed_entry(vault)
+    cfg = config_mod.load(vault)
+    # the shape #94 leaves behind: a row with a carrier, recorded nowhere in that carrier's markdown
+    graph_mod.add_edge(cfg, eid, "depends_on", "someone", note_id=eid, record=False)
+    before = note_path(vault, eid).read_text()
+
+    proc = run_cli("--vault", str(vault), "repair", "--edges")
+    assert proc.returncode == 0, proc.stderr
+    assert eid in proc.stdout and "depends_on" in proc.stdout
+    assert note_path(vault, eid).read_text() == before, "a dry run must not write"
+
+
+@pytest.mark.xfail(strict=True, reason="#94: re-homing a db-only edge into its src entry does not "
+                                         "exist")
+def test_repair_edges_apply_survives_a_rebuild(vault):
+    eid = seed_entry(vault)
+    cfg = config_mod.load(vault)
+    graph_mod.add_edge(cfg, eid, "depends_on", "someone", note_id=eid, record=False)
+
+    proc = run_cli("--vault", str(vault), "repair", "--edges", "--apply")
+    assert proc.returncode == 0, proc.stderr
+    report = json.loads(proc.stdout)
+    assert report["rehomed"] == 1 and report["unresolved"] == 0
+    assert f"{eid}:depends_on:someone" in note_path(vault, eid).read_text()
+
+    Path(cfg.db_path).unlink()
+    assert run_cli("--vault", str(vault), "reindex").returncode == 0
+    assert [r[3] for r in edge_rows(vault)] == ["someone"], "the markdown is the truth"
