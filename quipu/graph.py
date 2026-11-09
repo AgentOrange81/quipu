@@ -349,6 +349,8 @@ def contradict(cfg: Config, old_edge_id: int, src: str, predicate: str, dst: str
     _check_predicate(cfg, predicate)
     if not (dst or "").strip():
         raise ValueError("contradict needs a destination to believe in")
+    if not (src or "").strip():
+        raise ValueError("contradict needs a subject to believe about")
     c = connect(cfg.db_path)
     try:
         row = c.execute("SELECT id, src, predicate, dst, note_id FROM edges WHERE id = ?",

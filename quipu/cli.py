@@ -316,6 +316,12 @@ def cmd_show(args) -> int:
 
 def cmd_edge(args) -> int:
     cfg = _cfg(args)
+    if not all(part.strip() for part in (args.src, args.predicate, args.dst)):
+        # `quipu edge "" contradicts x` asserted a live edge with an empty subject (measured: it
+        # created one, and only a rebuild dropped it). The positional names ARE the spec; an empty
+        # one is not a name, and `parse_edge_spec` refuses that shape everywhere else (#107).
+        print("edge needs a non-empty src, predicate and dst", file=sys.stderr)
+        return 2
     if not args.note:
         # an edge in no entry is an edge the markdown does not know about, and `rm index.db`
         # would take it with the db. Say so, loudly, on stderr.

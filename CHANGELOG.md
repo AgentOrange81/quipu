@@ -62,6 +62,10 @@ truth and a migration is the user's data.
   that the replay then refuses. The parser now reads with `strict=False`, and `apply()` refuses any part
   holding `:` before it reaches the frontmatter, reporting it like any other unassertable claim.
 
+- **an empty entity name is refused** (#107). `quipu edge "" contradicts x` asserted a live edge with no
+  subject; the spec parser refuses that shape everywhere else, and only a rebuild dropped the row. Both
+  `edge` and `contradict` now refuse an empty subject, predicate or destination at the CLI boundary.
+
 ### Known at this version
 
 - the live vault on this box still holds **4 index-only edges** until `quipu repair --edges --apply` is run
