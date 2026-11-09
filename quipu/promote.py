@@ -18,7 +18,15 @@ from . import KINDS
 from .config import DEFAULT_LLM_TIMEOUT, Config
 from .graph import add_edge, close_superseded, ensure_entity
 from .index import connect
-from .store import Entry, check_summary, first_prose_line, format_edge_spec, looks_like_blob, write_entry
+from .store import (
+    Entry,
+    check_summary,
+    first_prose_line,
+    format_edge_spec,
+    iter_entries,
+    looks_like_blob,
+    write_entry,
+)
 
 PROMPT_PATH = Path(__file__).resolve().parent.parent / "prompts" / "promote.md"
 
@@ -442,13 +450,26 @@ def _prose_handle(summary: str, body: str) -> str:
 
 
 def apply(proposals: list[Proposal], cfg: Config, agent: str = "", project: str = "",
-          session: str = "", source: str = "") -> list[Entry]:
+          session: str = "", source: str = "", report: dict | None = None) -> list[Entry]:
     """Write proposals, gated by the promotion threshold.
 
     promoted    importance >= cfg.promote_threshold AND evidence present
     raw         everything else (kept verbatim for a later pass; it costs nothing to keep)
+
+    A model's proposal is a CALLER like any other, so its edges face the closed vocabulary here,
+    at the write boundary (#103). The first real pass over a live session proposed
+    `main:implemented_by:quipu`; the spec went into the markdown, the graph refused it, and `audit`
+    reported it from then on — the claim was stored where it could never be queried. A refused spec
+    is now reported in `report["skipped_edges"]` and written nowhere: the edge is the claim, the
+    entry is the memory, and only the claim was bad.
     """
     written: list[Entry] = []
+    refused: list[str] = []
+    refused_supersedes: list[str] = []
+    # a model writes an ID field the same way it writes a carrier: with prose in it. Measured on a
+    # real pass: `supersedes: "Re-measured after engine 0.1.56, llama.cpp e853ec9a8 …"` — the pair
+    # then references nothing, `audit` reports it forever and the preference export silently loses it.
+    known_ids = {e.id for _pth, e in iter_entries(cfg.root)}
     for p in proposals:
         # the model is a caller like any other, so the handle rule applies here too (#77, #85): a
         # measured run over a real transcript emitted a summary starting with a quote, and this path
@@ -457,12 +478,24 @@ def apply(proposals: list[Proposal], cfg: Config, agent: str = "", project: str 
         promoted = p.importance >= cfg.promote_threshold and bool(p.evidence)
         # the entry that asserted an edge records it, so the graph survives a lost db (#24).
         # A raw proposal never enters the graph, so it carries no edges either.
-        specs = [format_edge_spec(src, predicate, dst) for src, predicate, dst in p.edges] if promoted else []
+        kept_supersedes: list[str] = []
+        for old_id in p.supersedes:
+            if old_id in known_ids:
+                kept_supersedes.append(old_id)
+            else:
+                refused_supersedes.append(old_id)
+        specs: list[str] = []
+        if promoted:
+            for src, predicate, dst in p.edges:
+                if predicate not in cfg.predicates:
+                    refused.append(format_edge_spec(src, predicate, dst))
+                    continue
+                specs.append(format_edge_spec(src, predicate, dst))
         e = Entry(
             kind=p.kind, state="promoted" if promoted else "raw", agent=agent, project=project,
             session=session, confidence=p.confidence, importance=p.importance,
             source=source or "reflect", ask=p.ask, summary=p.summary, evidence=p.evidence,
-            supersedes=p.supersedes, tags=p.tags, edges=specs, body=p.body,
+            supersedes=kept_supersedes, tags=p.tags, edges=specs, body=p.body,
         )
         write_entry(cfg.root, e)
         written.append(e)
@@ -483,6 +516,9 @@ def apply(proposals: list[Proposal], cfg: Config, agent: str = "", project: str 
         # way `quipu write --supersedes` does; an edge the new entry restates is left live
         if e.supersedes:
             close_superseded(cfg, e.supersedes, e)
+    if report is not None:
+        report["skipped_edges"] = refused
+        report["skipped_supersedes"] = refused_supersedes
     return written
 
 

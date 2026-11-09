@@ -212,8 +212,12 @@ def cmd_reflect(args) -> int:
     if args.dry_run:
         print(json.dumps([p.__dict__ for p in proposals], indent=2, ensure_ascii=False))
         return 0
+    report: dict = {}
     written = promote_mod.apply(proposals, cfg, agent=args.agent, project=args.project,
-                                session=args.session, source=args.transcript or "stdin")
+                                session=args.session, source=args.transcript or "stdin",
+                                report=report)
+    for spec in report.get("skipped_edges") or []:
+        print(f"skipped edge {spec}: predicate is outside the closed vocabulary", file=sys.stderr)
     graph_mod.materialize(cfg)
     index_mod.reindex(cfg.root, cfg.db_path)
     promoted = sum(1 for e in written if e.state == "promoted")
@@ -682,6 +686,9 @@ def cmd_hook(args) -> int:
         print(result.prompt)
         return 0
     print(result.line())
+    for spec in result.skipped_edges:
+        print(f"warning: skipped edge {spec}: predicate is outside the closed vocabulary",
+              file=sys.stderr)
     if result.proposed == 0:
         # a completed pass that extracted nothing is a legitimate outcome (a thin transcript) but it
         # must not be INVISIBLE: a hook that runs for a week and writes nothing looks exactly like
