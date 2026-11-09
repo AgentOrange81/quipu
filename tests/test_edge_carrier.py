@@ -120,3 +120,19 @@ def test_repair_edges_apply_survives_a_rebuild(vault):
     Path(cfg.db_path).unlink()
     assert run_cli("--vault", str(vault), "reindex").returncode == 0
     assert [r[3] for r in edge_rows(vault)] == ["someone"], "the markdown is the truth"
+
+
+def test_the_audit_agrees_once_the_repair_has_run(vault):
+    """The defect #94's first pass left: the repair wrote the markdown, and `audit` kept reporting
+    the edge, because it resolves the carrier from `note_id` alone while the repair uses `src`."""
+    eid = seed_entry(vault)
+    cfg = config_mod.load(vault)
+    graph_mod.add_edge(cfg, eid, "depends_on", "someone", note_id="prose, not an id", record=False)
+    assert json.loads(run_cli("--vault", str(vault), "audit").stdout)["edges_not_in_markdown"]
+
+    proc = run_cli("--vault", str(vault), "repair", "--edges", "--apply")
+    assert proc.returncode == 0, proc.stderr
+    assert json.loads(proc.stdout)["rehomed"] == 1
+
+    report = json.loads(run_cli("--vault", str(vault), "audit").stdout)
+    assert report["edges_not_in_markdown"] == [], "the audit must agree with the repair it just ran"
