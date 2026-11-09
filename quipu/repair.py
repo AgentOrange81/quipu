@@ -22,7 +22,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from .importers.fabric import _split_frontmatter
-from .store import Entry, iter_entries
+from .store import Entry, format_edge_spec, iter_entries
 
 QUOTES = ("'", '"')
 
@@ -176,3 +176,74 @@ def reindex(vault: str | Path) -> None:
 
     cfg = config_mod.load(vault, create=True)
     index_mod.reindex(cfg.root, cfg.db_path)
+
+
+# --------------------------------------------------------------------------------------------------
+# The edges the index holds and the markdown does not (#94)
+#
+# `add_edge` refuses a carrier that names no entry now, but a vault written before that rule holds
+# edges recorded nowhere: `rm .quipu/index.db` + `reindex` deletes them. Each of them is recoverable
+# from its own `src`, because the caller asserted the edge against an entry and used that entry's id
+# as the entity name. `note_id` is only a fallback — it is exactly the field a bad caller filled with
+# prose, which is how the edges got here.
+
+
+@dataclass
+class EdgeRepair:
+    edge: int
+    spec: str
+    carrier: str = ""        # the entry id that will carry the spec
+    reason: str = ""         # why no entry can carry it
+
+
+@dataclass
+class EdgeResult:
+    edges: list[EdgeRepair] = field(default_factory=list)
+    rehomed: int = 0
+    unresolved: int = 0
+
+
+def find_edges(vault: str | Path) -> EdgeResult:
+    """Live edges no entry's markdown records, and the entry that should carry each. Writes nothing."""
+    from . import config as config_mod
+    from . import graph as graph_mod
+    from . import index as index_mod
+
+    cfg = config_mod.load(vault, create=True)
+    entries = {e.id: e for _p, e in iter_entries(cfg.root)}
+    result = EdgeResult()
+    c = index_mod.connect(cfg.db_path)
+    try:
+        rows = c.execute("SELECT id, src, predicate, dst, note_id FROM edges WHERE valid_to IS NULL "
+                         "ORDER BY id").fetchall()
+    finally:
+        c.close()
+    for r in rows:
+        spec = format_edge_spec(r["src"], r["predicate"], r["dst"])
+        carriers = [c for c in (r["src"], r["note_id"] or "") if c in entries]
+        # recorded when EITHER candidate's entry says so: the `src` is who asserted it, the
+        # `note_id` is who the row claims, and a rebuild replays any entry that holds the spec
+        if any(graph_mod.entry_records_edge(entries[c], spec) for c in carriers):
+            continue
+        rep = EdgeRepair(edge=r["id"], spec=spec, carrier=carriers[0] if carriers else "")
+        if not rep.carrier:
+            rep.reason = f"no entry named {r['src']!r} and none named {r['note_id'] or ''!r}"
+            result.unresolved += 1
+        result.edges.append(rep)
+    return result
+
+
+def apply_edges(vault: str | Path, result: EdgeResult) -> int:
+    """Write each spec into its carrier's frontmatter. Same path, no rename, no new id."""
+    from . import config as config_mod
+    from . import graph as graph_mod
+
+    cfg = config_mod.load(vault, create=True)
+    written = 0
+    for rep in result.edges:
+        if rep.reason or not rep.carrier:
+            continue
+        if graph_mod.record_edge(cfg, rep.carrier, rep.spec):
+            written += 1
+    result.rehomed = written
+    return written
