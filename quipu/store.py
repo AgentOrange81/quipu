@@ -418,11 +418,18 @@ def format_edge_spec(src: str, predicate: str, dst: str) -> str:
 
 
 def parse_edge_spec(spec: str) -> tuple[str, str, str]:
-    """Split "SRC:PRED:DST" into its three parts. Raises ValueError on a malformed spec."""
-    parts = (spec or "").split(":", 2)
-    if len(parts) != 3:
-        raise ValueError(f"edge spec must be src:predicate:dst, got {spec!r}")
-    src, predicate, dst = (p.strip() for p in parts)
-    if not src or not predicate or not dst:
-        raise ValueError(f"edge spec must be src:predicate:dst, got {spec!r}")
+    """Split "SRC:PRED:DST" into its three parts. Raises ValueError on a malformed spec.
+
+    Exactly three parts. `split(":", 2)` used to absorb every extra colon into `dst`, so
+    `wraith:kernel-7.0.0-43:required:nvidia-driver-615-open` parsed "fine" as src=wraith,
+    predicate=kernel-7.0.0-43, dst="required:nvidia-driver-615-open": a claim nobody wrote, and one
+    no writer can re-emit, since `format_edge_spec` would put those back as four parts (#98). An
+    entity name containing a colon is not expressible in this format — that is the format's rule,
+    and it is worth saying out loud rather than reshaping silently.
+    """
+    parts = (spec or "").split(":")
+    if len(parts) != 3 or not all(part.strip() for part in parts):
+        raise ValueError(f"edge spec takes exactly three colon-separated parts "
+                         f"(src:predicate:dst), got {len(parts)} in {spec!r}")
+    src, predicate, dst = (part.strip() for part in parts)
     return src, predicate, dst

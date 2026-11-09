@@ -752,8 +752,8 @@ def rebuild(cfg: Config) -> dict:
         for spec in e.edges:
             try:
                 src, predicate, dst = parse_edge_spec(spec)
-            except ValueError:
-                skipped.append(f"{e.id}: {spec!r} is not a src:predicate:dst spec")
+            except ValueError as exc:
+                skipped.append(f"{e.id}: {spec!r} is not a src:predicate:dst spec ({exc})")
                 continue
             if predicate not in cfg.predicates:
                 skipped.append(f"{e.id}: {spec!r} (predicate {predicate!r} is not in the "
