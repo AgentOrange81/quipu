@@ -22,6 +22,12 @@ truth and a migration is the user's data.
   `--apply` writes the spec into that entry's frontmatter and reindexes; an edge with no entry to carry it
   is reported and counted, and the command exits non-zero while any remain.
 
+- **a repaired vault stops reporting itself broken** (#96). `audit` and `graph.rebuild()` resolved the entry
+  carrying an edge from the row's `note_id` alone — the column a bad caller filled with prose — so the four
+  edges `repair --edges --apply` had just re-homed were reported unrecorded again, and a rebuild counted
+  them as orphans. All three surfaces now share `graph.carrier_entries()`, and `repair`'s post-apply
+  recovery performs the same index + graph rebuild as `quipu reindex` instead of indexing alone.
+
 ### Known at this version
 
 - the live vault on this box still holds **4 index-only edges** until `quipu repair --edges --apply` is run
