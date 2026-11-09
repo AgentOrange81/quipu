@@ -63,7 +63,9 @@ def read_transcript(source: str | Path, stdin=None) -> str:
     """
     if str(source) == "-":
         return promote_mod.load_transcript((stdin or sys.stdin).read())
-    return promote_mod.load_transcript(Path(source))
+    # NOT `Path(source)`: a rendered transcript (--session-db) is text, and wrapping it in a Path
+    # turned the first turn into a filename — "transcript not found: user: why did the box …" (#101)
+    return promote_mod.load_transcript(source)
 
 
 def _existing(cfg) -> list[str]:

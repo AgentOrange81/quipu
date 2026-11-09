@@ -175,12 +175,21 @@ def cmd_reflect(args) -> int:
     reached nothing must not exit 0.
     """
     cfg = _cfg(args)
-    source = args.transcript if args.transcript else _read_stdin()
-    try:
-        transcript = promote_mod.load_transcript(source)
-    except ValueError as exc:
-        print(str(exc), file=sys.stderr)
-        return 2
+    if getattr(args, "session_db", ""):
+        # a live Hermes session lives in state.db, not in sessions/<id>.jsonl (#101)
+        try:
+            transcript = promote_mod.read_session_db(args.session_db, args.session or "",
+                                                     include_tools=args.include_tools)
+        except ValueError as exc:
+            print(str(exc), file=sys.stderr)
+            return 2
+    else:
+        source = args.transcript if args.transcript else _read_stdin()
+        try:
+            transcript = promote_mod.load_transcript(source)
+        except ValueError as exc:
+            print(str(exc), file=sys.stderr)
+            return 2
     if promote_mod.LAST_LOAD_STATS.malformed:
         print(f"{promote_mod.LAST_LOAD_STATS.malformed} malformed lines skipped", file=sys.stderr)
     existing = [e.summary for _p, e in iter_entries(cfg.root) if e.state == "promoted"]
@@ -651,8 +660,16 @@ def cmd_hook(args) -> int:
     """
     cfg = _cfg(args)
     dry = args.dry_run or hook_mod.dry_run_requested()
+    source = args.transcript
+    if getattr(args, "session_db", ""):
+        try:
+            source = promote_mod.read_session_db(args.session_db, args.session or "",
+                                                 include_tools=args.include_tools)
+        except ValueError as exc:
+            print(f"hook failed: {exc}", file=sys.stderr)
+            return 1
     try:
-        result = hook_mod.run(cfg, args.transcript, _provider(args, cfg),
+        result = hook_mod.run(cfg, source, _provider(args, cfg),
                               agent=args.agent, project=args.project, session=args.session,
                               timeout=args.timeout, dry_run=dry, max_chars=args.max_chars)
     except hook_mod.HookError as exc:
@@ -752,6 +769,11 @@ def build_parser() -> argparse.ArgumentParser:
                         "(0 disables chunking; a single longer turn is still kept whole)")
     s.add_argument("--endpoint-timeout", action=_EndpointTimeoutAction, default=None,
                    help="override the [llm] timeout (seconds) for this request")
+    s.add_argument("--session-db", default="",
+                   help="read the transcript from a Hermes state.db instead of a file "
+                        "(needs --session; live sessions are not written to sessions/*.jsonl)")
+    s.add_argument("--include-tools", action="store_true",
+                   help="with --session-db: also read tool results, capped at 2000 chars each")
     s.add_argument("--dry-run", action="store_true")
 
     s = add("hook", "session-end adapter: reflect a transcript, fail loudly", cmd_hook)
@@ -770,6 +792,11 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--endpoint-timeout", action=_EndpointTimeoutAction, default=None,
                    help="override the [llm] timeout (seconds) for each request — "
                         "--timeout is the budget for the whole pass")
+    s.add_argument("--session-db", default="",
+                   help="read the transcript from a Hermes state.db instead of a file "
+                        "(needs --session; live sessions are not written to sessions/*.jsonl)")
+    s.add_argument("--include-tools", action="store_true",
+                   help="with --session-db: also read tool results, capped at 2000 chars each")
     s.add_argument("--dry-run", action="store_true",
                    help="print the prompt and write nothing (also QUIPU_HOOK_DRY_RUN=1)")
 

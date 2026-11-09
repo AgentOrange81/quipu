@@ -37,6 +37,15 @@ truth and a migration is the user's data.
   parse "fine" into a claim nobody wrote and no writer could re-emit, and now it is refused at the write
   boundary and reported as malformed by the replay.
 
+- **a reflection pass can read a live Hermes session from `state.db`** (#101). Hermes stopped writing
+  `profiles/<p>/sessions/<id>.jsonl` for running sessions — the newest file on this box is 2026-10-28
+  while the db holds sessions through today — so `quipu hook`/`reflect` were pointed at a directory that
+  no longer receives transcripts. `--session-db <path> --session <id>` reads the same turns from the
+  `messages` table in the same `role: text` shape the loader emits, so the chunker and the prompt cannot
+  tell them apart. Prose by default (18 KB against 376 KB of rows on a measured session); `--include-tools`
+  adds capped, marked tool lines. Measured: one real session, 4 proposals, 4 promoted, 101.7 s on the
+  on-box 35B tier, one chunk.
+
 ### Known at this version
 
 - the live vault on this box still holds **4 index-only edges** until `quipu repair --edges --apply` is run
