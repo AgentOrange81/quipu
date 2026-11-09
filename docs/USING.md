@@ -245,6 +245,29 @@ fabric wrote. If you imported before that fix, `quipu audit` names every entry s
 a leading quote character — the parser fix does not rewrite notes that are already on disk, and the audit
 is how the damage stays visible.
 
+## Reflecting a live Hermes session
+
+Hermes writes `profiles/<p>/sessions/<id>.jsonl` for exported sessions, **not** for the ones it is
+running: on this box the newest file there is from 2026-10-28 while `state.db` holds sessions through
+today. A hook pointed at that directory reflects the past and nothing else, and exits 0 doing it. Read
+the live session from the db instead:
+
+```bash
+quipu --vault ~/vault hook --session-db ~/.hermes/profiles/glitch/state.db --session f71c6b37 \
+  --agent glitch --project quipu
+```
+
+`--session` takes an id, or any fragment that matches exactly one — a 64-hex id is not something a
+human types, and an ambiguous fragment is refused rather than guessed. The reader takes **prose**
+(`user` and `assistant` turns) by default: a measured session held 376 KB of rows against 18 KB of
+prose, and the decisions, measurements and corrections live in the prose. A pass over one such session
+produced 4 promoted entries in 102 s on the 35B tier, one chunk, no chunking needed.
+
+`reflect` takes the same flag. `--include-tools` (library: `include_tools=True`) adds
+`tool <name>: …` lines capped at 2000 characters and marked `…[truncated]`, for the case where the
+evidence is in a tool result. An assistant row with no content is a tool-call turn, not a silent turn:
+it is skipped and counted, never rendered as an empty `assistant:`.
+
 ## Restricting a search to a time window
 
 Entries have always carried `created`; search now filters on it, so "what did we decide in October" is

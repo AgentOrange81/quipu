@@ -130,6 +130,81 @@ def load_transcript(source: str | Path, stats: LoadStats | None = None) -> str:
     return "\n".join(lines)
 
 
+def read_session_db(db_path: str | Path, session_id: str, include_tools: bool = False,
+                    tool_chars: int = 2000, stats: LoadStats | None = None) -> str:
+    """Render a Hermes session from its `state.db` as `role: text` lines.
+
+    Hermes stopped writing `profiles/<p>/sessions/<id>.jsonl` for live sessions — the transcripts a
+    reflection pass needs now live in `state.db`'s `messages` table, and a hook pointed at the JSONL
+    directory silently reflects nothing from that day on. This reads the same turns from the db, in
+    the SAME shape `load_transcript` emits, so the chunker and the prompt cannot tell them apart.
+
+    Prose by default: `user` and `assistant` rows only. A state db holds everything — 376 KB of tool
+    output against 18 KB of prose on a measured session — and it is the prose that carries decisions,
+    measurements and corrections. `include_tools` adds `tool <name>: …` lines capped at `tool_chars`,
+    marked where they were cut, because a truncated tool result is still readable evidence.
+
+    An assistant row with no content is a tool-call turn, not a silent turn: it is skipped and
+    counted, never rendered as an empty `assistant:`. A session with no prose at all raises — a pass
+    over nothing must not look like a pass.
+    """
+    import sqlite3
+
+    counts = stats if stats is not None else LAST_LOAD_STATS
+    counts.reset()
+    path = Path(db_path).expanduser()
+    if not path.exists():
+        raise ValueError(f"session db not found: {path}")
+    sid = (session_id or "").strip()
+    if not sid:
+        raise ValueError("--session-db needs --session <id>: the db holds many sessions")
+    try:
+        c = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
+        c.row_factory = sqlite3.Row
+        try:
+            # an exact id, or a prefix that matches exactly one session — a 64-hex id is not something
+            # a human types, and the same rule as `find_entry` keeps the CLI usable without guessing
+            matches = [r["id"] for r in c.execute(
+                "SELECT id FROM sessions ORDER BY coalesce(last_activity_at, started_at) DESC")
+                if r["id"] == sid or sid in r["id"]]
+            if len(matches) != 1:
+                why = ("no session matches" if not matches
+                       else "is ambiguous between " + ", ".join(matches[:3]))
+                raise ValueError(f"{sid!r} {why} in {path}")
+            sid = matches[0]
+            rows = c.execute("SELECT role, content, tool_name FROM messages WHERE session_id = ? "
+                             "ORDER BY timestamp, id", (sid,)).fetchall()
+        finally:
+            c.close()
+    except sqlite3.Error as exc:
+        raise ValueError(f"{path} is not a readable Hermes session db: {exc}") from exc
+
+    lines: list[str] = []
+    for row in rows:
+        role = str(row["role"] or "").lower()
+        body = re.sub(r"\s+", " ", str(row["content"] or "")).strip()
+        if role in ("user", "assistant", "human"):
+            if not body:
+                counts.skipped += 1      # a tool-call turn: the call is in the row, not the prose
+                continue
+            lines.append(f"user: {body}" if role == "human" else f"{role}: {body}")
+            counts.messages += 1
+        elif role == "tool" and include_tools:
+            if not body:
+                counts.skipped += 1
+                continue
+            if tool_chars > 0 and len(body) > tool_chars:
+                body = body[:tool_chars] + " …[truncated]"
+            name = str(row["tool_name"] or "").strip()
+            lines.append(f"tool {name}: {body}" if name else f"tool: {body}")
+            counts.messages += 1
+        else:
+            counts.skipped += 1
+    if not lines:
+        raise ValueError(f"session {sid!r} has no user or assistant turns")
+    return "\n".join(lines)
+
+
 def _sniffs_jsonl(text: str, path: Path | None) -> bool:
     """A `.jsonl` name is a promise; without one, the first non-empty line has to be a message row."""
     if path is not None and path.suffix.lower() in (".jsonl", ".ndjson"):
