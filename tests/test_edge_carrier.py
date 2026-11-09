@@ -136,3 +136,12 @@ def test_the_audit_agrees_once_the_repair_has_run(vault):
 
     report = json.loads(run_cli("--vault", str(vault), "audit").stdout)
     assert report["edges_not_in_markdown"] == [], "the audit must agree with the repair it just ran"
+
+
+def test_an_empty_subject_is_refused(vault):
+    """`quipu edge "" contradicts x` created a live edge with no subject; only a rebuild dropped it."""
+    seed_entry(vault)
+    proc = run_cli("--vault", str(vault), "edge", "", "contradicts", "35a44ae6", "--note", "")
+    assert proc.returncode == 2, proc.stdout + proc.stderr
+    assert "non-empty" in proc.stderr
+    assert edge_rows(vault) == []
