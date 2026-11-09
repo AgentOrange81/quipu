@@ -474,9 +474,11 @@ def cmd_audit(args) -> int:
                 problems.append(f"{e.id}: supersedes {old} but its edge is still live")
     unrecorded = []
     for r in rows:
-        entry = entries.get(r["note_id"] or "")
+        # `src` first: that is the entry that asserted the edge, and `note_id` is the column a bad
+        # caller filled with prose. Asking one of them let a repaired vault report itself broken (#96)
+        candidates = graph_mod.carrier_entries(entries, r["src"], r["note_id"] or "")
         spec = format_edge_spec(r["src"], r["predicate"], r["dst"])
-        if entry is None or not graph_mod.entry_records_edge(entry, spec):
+        if not any(graph_mod.entry_records_edge(e, spec) for e in candidates):
             unrecorded.append({"edge": r["id"], "spec": spec, "note_id": r["note_id"]})
     print(json.dumps({"entries": len(entries), "problems": problems,
                       "schema_version": version,

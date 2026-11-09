@@ -175,6 +175,23 @@ def record_closure(cfg: Config, note_id: str, src: str, predicate: str, dst: str
     return _update_entry(cfg, note_id, mutate)
 
 
+def carrier_entries(entries: dict[str, Entry], src: str, note_id: str) -> list[Entry]:
+    """The entries that could carry this edge, in order of authority (#96).
+
+    `src` is the id of the entry that asserted it — the caller used that id as the entity name — and
+    `note_id` is what the row claims. Both can be prose, because that is the field a bad caller
+    filled with a summary, so every caller must ask "does any candidate exist" and "does any
+    candidate record the spec" rather than trusting one column. `audit`, `repair --edges` and the
+    rebuild's fold phase share this, or they disagree about the same vault.
+    """
+    out: list[Entry] = []
+    for eid in (src, note_id or ""):
+        entry = entries.get(eid) if eid else None
+        if entry is not None and all(entry.id != e.id for e in out):
+            out.append(entry)
+    return out
+
+
 def entry_records_edge(entry: Entry, spec: str) -> bool:
     """Does the entry already record this edge? Compare DISPLAY forms: the db stores displays,
     so that is what a spec resolves to."""
@@ -677,22 +694,24 @@ def rebuild(cfg: Config) -> dict:
         if not row.get("valid_to"):
             opened_at.setdefault((row["src"], row["predicate"], row["valid_from"]), row)
     for row in rows:
-        note_id = row.get("note_id") or ""
-        entry = entries.get(note_id)
-        if entry is None:
+        # the carrier is the entry that asserted the edge (`src`), or the one the row claims — a
+        # `note_id` alone hides an edge whose caller wrote prose there (#96)
+        candidates = carrier_entries(entries, row["src"], row.get("note_id") or "")
+        if not candidates:
             # asserted with no entry behind it: there is nowhere in the markdown to put it
             orphans += 1
             continue
         spec = format_edge_spec(row["src"], row["predicate"], row["dst"])
-        if not entry_records_edge(entry, spec):
-            record_edge(cfg, note_id, spec)
+        entry = candidates[0]
+        if not any(entry_records_edge(e, spec) for e in candidates):
+            record_edge(cfg, entry.id, spec)
             folded += 1
         if row["valid_to"]:
             replacement = ""
             cand = opened_at.get((row["src"], row["predicate"], row["valid_to"]))
             if cand is not None:
                 replacement = format_edge_spec(cand["src"], cand["predicate"], cand["dst"])
-            record_closure(cfg, note_id, row["src"], row["predicate"], row["dst"], row["valid_to"],
+            record_closure(cfg, entry.id, row["src"], row["predicate"], row["dst"], row["valid_to"],
                            replacement=replacement)
 
     c = connect(cfg.db_path)

@@ -171,11 +171,20 @@ def apply(vault: str | Path, result: Result) -> int:
 
 
 def reindex(vault: str | Path) -> None:
+    """The same recovery `quipu reindex` performs — index AND graph.
+
+    Indexing alone leaves the graph table exactly as it was, so a repair that just rewrote the
+    markdown left an index that disagreed with it: `audit` kept reporting the edges the pass had
+    re-homed, because the row's `note_id` was still the prose it had always been (#96).
+    """
     from . import config as config_mod
+    from . import graph as graph_mod
     from . import index as index_mod
 
     cfg = config_mod.load(vault, create=True)
     index_mod.reindex(cfg.root, cfg.db_path)
+    graph_mod.rebuild(cfg)
+    graph_mod.materialize(cfg)
 
 
 # --------------------------------------------------------------------------------------------------
