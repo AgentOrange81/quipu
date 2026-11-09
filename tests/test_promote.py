@@ -148,3 +148,33 @@ def test_a_supersedes_that_names_no_entry_is_dropped_and_reported(cfg):
                                 report=report)
     assert written[0].supersedes == ["abcd1234"], written[0].supersedes
     assert report["skipped_supersedes"] == ["Re-measured after engine 0.1.56, llama.cpp"]
+
+
+# --- #105: what a model emits vs what a spec can hold ------------------------------------------
+
+def test_a_response_with_a_control_character_in_a_string_parses():
+    """A small local model puts a literal newline inside a JSON string; strict json.loads refuses it
+    and the whole pass is lost. Measured: 2 of 27 sessions failed this way on the 35B tier."""
+    raw = '{"entries": [{"kind": "fact", "summary": "line one\nline two is the same thought", ' \
+          '"evidence": "fixture", "importance": 0.9}]}'
+    proposals = promote_mod.parse_response(raw)
+    assert len(proposals) == 1
+    assert "line one" in proposals[0].summary
+
+
+def test_an_edge_whose_part_holds_the_separator_is_refused(cfg):
+    """`GraphRAG:requires:enable_thinking:false` re-parses as four parts, so a dst containing a colon
+    cannot round-trip. Measured on a real pass: the spec went to the markdown and the replay refused
+    it (#105). The claim is dropped and reported, like any other unassertable one."""
+    proposal = {
+        "kind": "fact", "summary": "thinking is disabled for that graph query",
+        "evidence": "fixture", "importance": 0.9, "ask": "why is thinking disabled?",
+        "entities": [],
+        "edges": [{"src": "GraphRAG", "predicate": "depends_on", "dst": "enable_thinking:false"}],
+        "confidence": 0.8,
+    }
+    report = {}
+    written = promote_mod.apply(promote_mod.parse_response(json.dumps({"entries": [proposal]})), cfg,
+                                report=report)
+    assert written[0].edges == [], "a spec that cannot round-trip is not storable"
+    assert report["skipped_edges"] == ["GraphRAG:depends_on:enable_thinking:false"]

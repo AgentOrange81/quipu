@@ -401,7 +401,10 @@ def parse_response(raw: str) -> list[Proposal]:
     m = re.search(r"\{.*\}", raw, re.S)
     if not m:
         raise ValueError("no JSON object in model response")
-    data = json.loads(m.group(0))
+    # strict=False: a small model puts a literal newline or tab inside a JSON string, and strict
+    # `json.loads` refuses the whole response — 2 of 27 live sessions failed exactly that way (#105).
+    # The characters are legal in the VALUE we want; only the framing needs to be JSON.
+    data = json.loads(m.group(0), strict=False)
     items = data.get("entries") if isinstance(data, dict) else data
     if not isinstance(items, list):
         raise ValueError("response has no entries list")
@@ -487,6 +490,12 @@ def apply(proposals: list[Proposal], cfg: Config, agent: str = "", project: str 
         specs: list[str] = []
         if promoted:
             for src, predicate, dst in p.edges:
+                # a part holding the separator cannot round-trip: "a:b:c:d" re-parses as four parts,
+                # so the claim would be stored where the replay refuses it (#105, measured live as
+                # GraphRAG:requires:enable_thinking:false)
+                if any(":" in part for part in (src, predicate, dst)):
+                    refused.append(format_edge_spec(src, predicate, dst))
+                    continue
                 if predicate not in cfg.predicates:
                     refused.append(format_edge_spec(src, predicate, dst))
                     continue

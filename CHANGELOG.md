@@ -55,6 +55,13 @@ truth and a migration is the user's data.
   session: it proposed `main:implemented_by:quipu` (not in the vocabulary) and
   `supersedes: "Re-measured after engine 0.1.56, …"` (prose in an id field) — neither is storable.
 
+- **a response with a control character parses, and an edge whose part holds the separator is refused**
+  (#105). Two failures out of 27 real sessions: a local model put a literal newline inside a JSON string
+  and strict `json.loads` discarded the whole pass, and one proposal produced
+  `GraphRAG:requires:enable_thinking:false` — a `dst` containing a colon, which formats to a four-part spec
+  that the replay then refuses. The parser now reads with `strict=False`, and `apply()` refuses any part
+  holding `:` before it reaches the frontmatter, reporting it like any other unassertable claim.
+
 ### Known at this version
 
 - the live vault on this box still holds **4 index-only edges** until `quipu repair --edges --apply` is run
