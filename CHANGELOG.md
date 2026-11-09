@@ -4,6 +4,30 @@ Notable changes, newest first. Versions follow `0.x` while the format and the CL
 anything that changes a vault's on-disk shape gets an explicit note, because markdown is the source of
 truth and a migration is the user's data.
 
+## Unreleased
+
+### Fixed
+
+- **an edge whose carrier names no entry is refused, not silently dropped** (#94). `add_edge()` passed
+  `note_id` to `record_edge()`, whose `find_entry()` returned `None`, so the write returned `False` with
+  nobody told: `quipu edge` printed the new id and exited 0 while the edge existed only in SQLite, and
+  `rm .quipu/index.db` + `reindex` deleted a live belief. The carrier is now resolved before any
+  connection opens — an unknown id is a usage error (exit 2) that writes nothing, on `edge` and on
+  `contradict`, where a refused replacement leaves the old belief live. An ABSENT carrier stays legal:
+  `quipu edge a part_of b` still warns and asserts a row no entry carries. `record=False` (the rebuild)
+  is exempt, because it promises the markdown already says it.
+- **`quipu repair --edges` re-homes what the old rule already broke** (#94). Dry run by default; it reports
+  each live edge the markdown does not record with the entry that will carry it, derived from the edge's
+  own `src` (the row's `note_id` is only a fallback — that is the field a bad caller filled with prose).
+  `--apply` writes the spec into that entry's frontmatter and reindexes; an edge with no entry to carry it
+  is reported and counted, and the command exits non-zero while any remain.
+
+### Known at this version
+
+- the live vault on this box still holds **4 index-only edges** until `quipu repair --edges --apply` is run
+  against it; `audit` reports them under `edges_not_in_markdown`. The repair derives all four from their
+  `src`, so the pass is expected to re-home 4 and leave 0 unresolved.
+
 ## 0.5.2 — 2026-10-31
 
 ### Fixed
