@@ -178,7 +178,8 @@ def cmd_reflect(args) -> int:
     if getattr(args, "session_db", ""):
         # a live Hermes session lives in state.db, not in sessions/<id>.jsonl (#101)
         try:
-            transcript = promote_mod.read_session_db(args.session_db, args.session or "")
+            transcript = promote_mod.read_session_db(args.session_db, args.session or "",
+                                                     include_tools=args.include_tools)
         except ValueError as exc:
             print(str(exc), file=sys.stderr)
             return 2
@@ -662,7 +663,8 @@ def cmd_hook(args) -> int:
     source = args.transcript
     if getattr(args, "session_db", ""):
         try:
-            source = promote_mod.read_session_db(args.session_db, args.session or "")
+            source = promote_mod.read_session_db(args.session_db, args.session or "",
+                                                 include_tools=args.include_tools)
         except ValueError as exc:
             print(f"hook failed: {exc}", file=sys.stderr)
             return 1
@@ -770,6 +772,8 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--session-db", default="",
                    help="read the transcript from a Hermes state.db instead of a file "
                         "(needs --session; live sessions are not written to sessions/*.jsonl)")
+    s.add_argument("--include-tools", action="store_true",
+                   help="with --session-db: also read tool results, capped at 2000 chars each")
     s.add_argument("--dry-run", action="store_true")
 
     s = add("hook", "session-end adapter: reflect a transcript, fail loudly", cmd_hook)
@@ -791,6 +795,8 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--session-db", default="",
                    help="read the transcript from a Hermes state.db instead of a file "
                         "(needs --session; live sessions are not written to sessions/*.jsonl)")
+    s.add_argument("--include-tools", action="store_true",
+                   help="with --session-db: also read tool results, capped at 2000 chars each")
     s.add_argument("--dry-run", action="store_true",
                    help="print the prompt and write nothing (also QUIPU_HOOK_DRY_RUN=1)")
 

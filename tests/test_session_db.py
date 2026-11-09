@@ -140,3 +140,16 @@ def test_the_cli_accepts_the_flag(tmp_path):
                           capture_output=True, text=True, timeout=60, stdin=subprocess.DEVNULL)
     assert proc.returncode == 0, proc.stdout + proc.stderr
     assert "1 entries, 1 promoted" in proc.stdout, proc.stdout
+
+
+def test_include_tools_reaches_the_prompt(tmp_path):
+    """The flag is documented, so it must do something observable: the prompt carries the tool line."""
+    db = _db(tmp_path, MIXED)
+    vault = tmp_path / "vault"
+    proc = subprocess.run([sys.executable, "-m", "quipu", "--vault", str(vault), "hook",
+                           "--session-db", str(db), "--session", SID, "--include-tools",
+                           "--dry-run", "--max-chars", "0"],
+                          capture_output=True, text=True, timeout=60, stdin=subprocess.DEVNULL)
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert "tool terminal: lsmod: no nvidia modules" in proc.stdout
+    assert "why did the box lose its driver?" in proc.stdout
