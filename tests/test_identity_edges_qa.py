@@ -179,9 +179,13 @@ def test_failed_replacement_gives_back_a_live_belief(cfg):
 
 
 def test_same_triple_with_a_different_note_id_returns_the_existing_edge(cfg):
-    first = graph_mod.add_edge(cfg, "app", "depends_on", "db", note_id="note-1", at=T1)
-    same_second = graph_mod.add_edge(cfg, "APP", "depends_on", "DB", note_id="note-2", at=T1)
-    later = graph_mod.add_edge(cfg, "app", "depends_on", "db", note_id="note-3", at=T2)
+    # record=False: this test is about the ROW's provenance, and #94 made a recorded carrier one
+    # that must resolve to an entry. Whether the markdown records the spec is test_edge_carrier.py's
+    # subject; `note-1` here is a provenance label, not a note this fixture creates.
+    first = graph_mod.add_edge(cfg, "app", "depends_on", "db", note_id="note-1", at=T1, record=False)
+    same_second = graph_mod.add_edge(cfg, "APP", "depends_on", "DB", note_id="note-2", at=T1,
+                                     record=False)
+    later = graph_mod.add_edge(cfg, "app", "depends_on", "db", note_id="note-3", at=T2, record=False)
 
     assert first == same_second == later, "the existing edge id is returned whatever the note_id"
     rows = graph_mod.timeline(cfg, "app")
@@ -192,9 +196,10 @@ def test_same_triple_with_a_different_note_id_returns_the_existing_edge(cfg):
 
 
 def test_reasserting_after_invalidation_creates_a_new_edge(cfg):
-    old = graph_mod.add_edge(cfg, "svc", "depends_on", "cache-v1", note_id="n1", at=T1)
+    # record=False: provenance labels, not entries — see the note on the test above (#94)
+    old = graph_mod.add_edge(cfg, "svc", "depends_on", "cache-v1", note_id="n1", at=T1, record=False)
     graph_mod.invalidate(cfg, old, at=T2)
-    new = graph_mod.add_edge(cfg, "svc", "depends_on", "cache-v1", note_id="n2", at=T3)
+    new = graph_mod.add_edge(cfg, "svc", "depends_on", "cache-v1", note_id="n2", at=T3, record=False)
 
     assert new != old, "invalidation is not deletion — a re-assert opens a fresh window"
     rows = graph_mod.timeline(cfg, "svc")

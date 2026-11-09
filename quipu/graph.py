@@ -11,6 +11,7 @@ import json
 import re
 import sqlite3
 import unicodedata
+from pathlib import Path
 
 from .config import Config
 from .index import connect
@@ -192,6 +193,36 @@ def entry_records_edge(entry: Entry, spec: str) -> bool:
     return False
 
 
+def _require_carrier(cfg: Config, note_id: str, verb: str) -> Path | None:
+    """The entry that must carry this edge, or None when no carrier is claimed.
+
+    An ABSENT carrier stays legal: `quipu edge a part_of b` with no `--note` is a documented
+    form, and it warns on stderr instead of refusing.
+
+    A carrier that is GIVEN but names no entry is a usage error, and it must be refused before
+    anything is written. The old path handed `note_id` to `record_edge()`, whose `find_entry()`
+    returned None, so `_update_entry` returned False and nobody was told: the edge existed only
+    in SQLite, and `rm .quipu/index.db` + `reindex` deleted a live belief (#94). A refusal that
+    writes nothing is the only safe one - a row without a carrier is the defect itself.
+
+    The message names the carrier verbatim, the fix (pass the entry id) and the recovery for a
+    vault that already holds such an edge (`quipu repair --edges`).
+    """
+    if not note_id:
+        return None
+    try:
+        path = find_entry(cfg.root, note_id)
+    except (OSError, ValueError):      # a carrier with glob characters in it is not an entry
+        path = None
+    if path is not None:
+        return path
+    raise ValueError(
+        f"{verb}: carrier {note_id!r} names no entry; pass the entry id of the note that asserts "
+        f"this edge (the 8-hex id of an existing entry), or run `quipu repair --edges` to re-home "
+        f"the edges the index holds but the markdown does not record"
+    )
+
+
 def _check_predicate(cfg: Config, predicate: str, allow_new_predicate: bool = False) -> None:
     """A predicate outside the closed vocabulary is a hard error — unless it is let through."""
     if predicate not in cfg.predicates and not allow_new_predicate:
@@ -262,6 +293,12 @@ def add_edge(cfg: Config, src: str, predicate: str, dst: str, note_id: str = "",
     (#24). `record=False` is for the rebuild, which replays what the markdown already says.
     """
     _check_predicate(cfg, predicate, allow_new_predicate)
+    # The carrier is resolved BEFORE the connection opens: a refused assertion must leave the db
+    # exactly as it was - no row, no event (#94). `record=False` is exempt on purpose: it asserts
+    # nothing about the markdown, it PROMISES the markdown already says this (the rebuild and
+    # identity-level callers), so there is no carrier left unrecorded by it.
+    if record:
+        _require_carrier(cfg, note_id, "edge")
     at = at or _entry_created(cfg, note_id) or now_iso()
     c = connect(cfg.db_path)
     try:
@@ -285,24 +322,32 @@ def contradict(cfg: Config, old_edge_id: int, src: str, predicate: str, dst: str
     transaction: a rejected replacement (a predicate outside the vocabulary, a destination that
     names nothing) must leave the old belief live. Closing first and validating after left the
     graph with a closed belief and no live edge at all.
+
+    The CARRIER is validated on the same terms, and even earlier: the row is read first, the
+    carrier the replacement would use (`note_id or row["note_id"]`) is resolved, and only then does
+    the transaction open (#94). A replacement that cannot be carried is refused while the old
+    belief is still live - the alternative was an edge in the db with no entry to carry it, which
+    `rm index.db` + `reindex` would delete.
     """
     _check_predicate(cfg, predicate)
     if not (dst or "").strip():
         raise ValueError("contradict needs a destination to believe in")
-    at = at or now_iso()
     c = connect(cfg.db_path)
     try:
+        row = c.execute("SELECT id, src, predicate, dst, note_id FROM edges WHERE id = ?",
+                        (old_edge_id,)).fetchone()
+        if row is None:
+            raise ValueError(f"no edge {old_edge_id}")
+        # The replacement is carried by an entry, or a rebuild drops it: an edge that exists
+        # only in the db is a live belief that vanishes, which is worse than one that comes
+        # back. With no note given, the entry that owned the closed edge carries it, so that
+        # entry's frontmatter ends up with the new spec in `edges:` AND the closure in
+        # `edge_closures:` - a replay then reproduces both windows. An explicit --note wins.
+        carrier = note_id or (row["note_id"] or "")
+        # resolved BEFORE the transaction opens: a refused replacement closes nothing (#94)
+        _require_carrier(cfg, carrier, "contradict")
+        at = at or now_iso()
         with c:
-            row = c.execute("SELECT id, src, predicate, dst, note_id FROM edges WHERE id = ?",
-                            (old_edge_id,)).fetchone()
-            if row is None:
-                raise ValueError(f"no edge {old_edge_id}")
-            # The replacement is carried by an entry, or a rebuild drops it: an edge that exists
-            # only in the db is a live belief that vanishes, which is worse than one that comes
-            # back. With no note given, the entry that owned the closed edge carries it, so that
-            # entry's frontmatter ends up with the new spec in `edges:` AND the closure in
-            # `edge_closures:` - a replay then reproduces both windows. An explicit --note wins.
-            carrier = note_id or (row["note_id"] or "")
             c.execute("UPDATE edges SET valid_to = ? WHERE id = ? AND valid_to IS NULL", (at, old_edge_id))
             c.execute("INSERT INTO events(at, kind, detail) VALUES(?,?,?)",
                       (at, "invalidate", json.dumps({"edge": old_edge_id})))

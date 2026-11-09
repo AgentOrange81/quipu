@@ -329,7 +329,13 @@ def cmd_invalidate(args) -> int:
 
 def cmd_contradict(args) -> int:
     cfg = _cfg(args)
-    eid = graph_mod.contradict(cfg, args.edge, args.src, args.predicate, args.dst, note_id=args.note or "")
+    try:
+        eid = graph_mod.contradict(cfg, args.edge, args.src, args.predicate, args.dst,
+                                   note_id=args.note or "")
+    except ValueError as exc:
+        # a refused replacement closes nothing: the old belief stays live and the db is unchanged
+        print(str(exc), file=sys.stderr)
+        return 2
     graph_mod.materialize(cfg)
     print(eid)
     return 0
@@ -519,9 +525,38 @@ def cmd_ask_backfill(args) -> int:
     return 0 if result.failed == 0 else 1
 
 
+def _repair_edges(cfg, args) -> int:
+    """Re-home every live edge the markdown does not record into the entry that asserted it (#94).
+
+    Reported by edge id, spec and the entry that will carry it; an edge with no entry to carry it is
+    reported and counted, never dropped and never given a guessed carrier. Exits non-zero while any
+    remain, the same contract `quipu repair` already makes for a summary it cannot recover.
+    """
+    result = repair_mod.find_edges(cfg.root)
+    if not result.edges:
+        print(json.dumps({"edges_not_in_markdown": 0, "note": "every live edge is in an entry"},
+                         indent=2))
+        return 0
+    if not args.apply:
+        for rep in result.edges:
+            where = rep.carrier or f"unresolved: {rep.reason}"
+            print(f"edge {rep.edge}  {rep.spec}  -> {where}")
+        print(f"\n{len(result.edges)} edges the markdown does not record, {result.unresolved} with "
+              f"no entry to carry them. Nothing written — re-run with --apply.", file=sys.stderr)
+        return 0
+    written = repair_mod.apply_edges(cfg.root, result)
+    repair_mod.reindex(cfg.root)
+    print(json.dumps({"edges_not_in_markdown": len(result.edges), "rehomed": written,
+                      "unresolved": result.unresolved}, indent=2))
+    return 0 if result.unresolved == 0 else 1
+
+
 def cmd_repair(args) -> int:
-    """Repair imported notes whose summary still carries its YAML quotes (#58). Dry run by default."""
+    """Fix imported notes whose summary still carries its YAML quotes (#58), or re-home the edges
+    the index holds and the markdown does not (#94). Dry run by default."""
     cfg = _cfg(args)
+    if args.edges:
+        return _repair_edges(cfg, args)
     result = repair_mod.find(cfg.root, args.source)
     if not result.repairs:
         print(json.dumps({"quoted_summaries": 0, "note": "nothing to repair"}, indent=2))
@@ -752,6 +787,9 @@ def build_parser() -> argparse.ArgumentParser:
 
     s = add("repair", "fix imported notes whose summary still carries its YAML quotes", cmd_repair)
     s.add_argument("--source", default="~/fabric", help="where the fabric originals live")
+    s.add_argument("--edges", action="store_true",
+                   help="instead: re-home the live edges the index holds and the markdown does "
+                        "not record (#94)")
     s.add_argument("--apply", action="store_true", help="write the notes (default: dry run)")
 
     s = add("brief", "write the standing answer: promoted entries, one line each", cmd_brief)
@@ -775,7 +813,9 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("src")
     s.add_argument("predicate")
     s.add_argument("dst")
-    s.add_argument("--note", default="")
+    s.add_argument("--note", default="",
+                   help="the id of the entry that carries this edge (e.g. 1a2b3c4d) - an entry "
+                        "id, not a description; an unknown id is refused")
     s.add_argument("--confidence", type=float, default=1.0)
     s.add_argument("--allow-new", action="store_true")
 
@@ -787,7 +827,9 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("src")
     s.add_argument("predicate")
     s.add_argument("dst")
-    s.add_argument("--note", default="")
+    s.add_argument("--note", default="",
+                   help="the id of the entry that carries the replacement edge (e.g. 1a2b3c4d) - an "
+                        "entry id, not a description; an unknown id is refused")
 
     s = add("timeline", "an entity's edges, optionally as of a date", cmd_timeline)
     s.add_argument("entity")

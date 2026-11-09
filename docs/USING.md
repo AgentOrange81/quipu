@@ -211,6 +211,25 @@ under a new slug.
 Measured on the live vault: 88 quoted summaries, 74 recovered from the fabric origin, 10 from the note's
 own body, 10 more as quotes-only, and 4 left as findings. A second run finds nothing to do.
 
+### An edge the index holds and the markdown does not
+
+`quipu edge` records every edge into the entry that asserted it, because the markdown is the truth and
+`rm .quipu/index.db` must lose nothing. A carrier that names no entry breaks that: the row lands in
+SQLite, nothing records it, and the next rebuild silently drops a live belief. The command now refuses
+such a carrier instead of ignoring it — `--note` takes an entry id, never a description — and a vault
+written before that rule can be repaired:
+
+```bash
+quipu --vault ~/vault repair --edges            # dry run: edge id, spec, the entry that will carry it
+quipu --vault ~/vault repair --edges --apply    # write the spec into that entry's frontmatter
+```
+
+The carrier is derived from the edge's own `src`, which is the entry that asserted it, and the row's
+`note_id` is only a fallback — that field is exactly where a bad caller wrote prose. An edge with no
+entry to carry it is reported with the candidates it tried and left alone; the command exits non-zero
+while any remain, the same contract the summary repair makes. `quipu audit` reports them under
+`edges_not_in_markdown` in the meantime.
+
 ## Importing fabric: quoted and wrapped summaries
 
 Fabric's own writer emits frontmatter values as YAML **single-quoted** scalars and wraps long ones onto a
