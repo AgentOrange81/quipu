@@ -46,6 +46,15 @@ truth and a migration is the user's data.
   adds capped, marked tool lines. Measured: one real session, 4 proposals, 4 promoted, 101.7 s on the
   on-box 35B tier, one chunk.
 
+- **a proposed edge or `supersedes` faces the vault before it is stored** (#103). `promote.apply()` built
+  the entry's `edges:` list from every proposed spec and only skipped the out-of-vocabulary ones when it
+  asserted into the graph, so the claim was written where the markdown keeps it forever and refused where
+  the graph lives — `audit` then reported it on every run. A model is a caller: `apply()` now keeps only
+  in-vocabulary specs, drops a `supersedes` that names no entry, and reports both in `skipped_edges` /
+  `skipped_supersedes`, which `reflect` and `hook` print. Measured on the first real pass over a live
+  session: it proposed `main:implemented_by:quipu` (not in the vocabulary) and
+  `supersedes: "Re-measured after engine 0.1.56, …"` (prose in an id field) — neither is storable.
+
 ### Known at this version
 
 - the live vault on this box still holds **4 index-only edges** until `quipu repair --edges --apply` is run

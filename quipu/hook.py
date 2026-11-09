@@ -42,6 +42,7 @@ class HookResult:
     proposed: int = 0
     chunks: int = 0
     seconds: float = 0.0
+    skipped_edges: list[str] = field(default_factory=list)
 
     @property
     def promoted(self) -> int:
@@ -122,12 +123,14 @@ def run(cfg, transcript: str | Path, provider, agent: str = "", project: str = "
     proposals = promote_mod.dedupe_proposals(_reflect_bounded(chunks, cfg, provider, timeout))
     # nothing is written until the model has answered in full: a transport error above leaves the
     # vault exactly as it was, which is what "no partial entry" means
+    report: dict = {}
     written = promote_mod.apply(proposals, cfg, agent=agent, project=project,
-                                session=session, source=str(transcript))
+                                session=session, source=str(transcript), report=report)
     graph_mod.materialize(cfg)
     index_mod.reindex(cfg.root, cfg.db_path)
     return HookResult(written=written, proposed=len(proposals), chunks=len(chunks),
-                      seconds=time.monotonic() - started)
+                      seconds=time.monotonic() - started,
+                      skipped_edges=report.get("skipped_edges") or [])
 
 
 def dry_run_requested(env: dict | None = None) -> bool:

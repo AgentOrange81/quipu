@@ -100,3 +100,51 @@ def test_a_blob_proposal_with_no_prose_body_keeps_the_entry(cfg):
     blob["body"] = '{"other": 1}'
     written = promote_mod.apply(promote_mod.parse_response(json.dumps({"entries": [blob]})), cfg)
     assert written[0].summary == '{"findings": []}'
+
+
+# --- #103: a proposal's edges face the same closed vocabulary as every other writer -------------
+
+def test_an_out_of_vocabulary_edge_is_neither_written_nor_asserted(cfg):
+    proposal = {
+        "kind": "fact", "summary": "the audit reads the markdown, not only the rows",
+        "evidence": "pytest tests/test_promote.py", "importance": 0.9,
+        "ask": "what does audit validate?", "entities": [],
+        "edges": [{"src": "audit", "predicate": "implements", "dst": "markdown-check"},
+                  {"src": "main", "predicate": "implemented_by", "dst": "quipu"}],
+        "confidence": 0.8,
+    }
+    report = {}
+    written = promote_mod.apply(promote_mod.parse_response(json.dumps({"entries": [proposal]})), cfg,
+                                report=report)
+    assert len(written) == 1, "a bad edge costs the claim, never the memory"
+    assert written[0].edges == ["audit:implements:markdown-check"], written[0].edges
+    assert report["skipped_edges"] == ["main:implemented_by:quipu"], report
+    from quipu import graph as graph_mod
+    live = [r["predicate"] for r in graph_mod.timeline(cfg, "audit")]
+    assert live == ["implements"]
+
+
+def test_a_clean_proposal_reports_nothing(cfg):
+    report = {}
+    promote_mod.apply(promote_mod.parse_response(json.dumps({"entries": GOOD})), cfg, report=report)
+    assert report["skipped_edges"] == []
+
+
+def test_a_supersedes_that_names_no_entry_is_dropped_and_reported(cfg):
+    """A real pass proposed `supersedes: "Re-measured after engine 0.1.56, …"` — prose in an id field.
+    Storing it makes the pair reference nothing and the preference export silently lose it."""
+    from quipu.store import Entry, write_entry
+    real = Entry(id="abcd1234", state="promoted", summary="the belief being corrected",
+                 evidence="fixture")
+    write_entry(cfg.root, real)
+    proposal = {
+        "kind": "decision", "summary": "the belief is now different", "evidence": "fixture",
+        "importance": 0.9, "ask": "what changed?", "entities": [],
+        "edges": [], "supersedes": ["abcd1234", "Re-measured after engine 0.1.56, llama.cpp"],
+        "confidence": 0.8,
+    }
+    report = {}
+    written = promote_mod.apply(promote_mod.parse_response(json.dumps({"entries": [proposal]})), cfg,
+                                report=report)
+    assert written[0].supersedes == ["abcd1234"], written[0].supersedes
+    assert report["skipped_supersedes"] == ["Re-measured after engine 0.1.56, llama.cpp"]
