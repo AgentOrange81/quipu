@@ -6,6 +6,22 @@ truth and a migration is the user's data.
 
 ## Unreleased
 
+Nothing yet.
+
+## 0.6.0 — 2026-11-10
+
+Fourteen fixes and two features, all of one shape: a surface that reported something other than what
+happened, or two surfaces that disagreed about the same claim.
+
+### On-disk shape
+
+Two **optional** frontmatter fields arrived — `model:` and `evidence_kind:` — and entries without them
+stay valid, so a 0.5.x vault opens unchanged and no entry is rewritten by upgrading. The index gained
+the matching columns through the existing migration, and since the index is derived, `rm
+.quipu/index.db` + `reindex` loses nothing. Existing entries can be classified without touching their
+claims: `quipu-evidence-backfill.py --apply` writes `evidence_kind:` into their markdown (this vault:
+1435 entries, classified from the evidence text they already carried).
+
 ### Fixed
 
 - **an edge whose carrier names no entry is refused, not silently dropped** (#94). `add_edge()` passed
