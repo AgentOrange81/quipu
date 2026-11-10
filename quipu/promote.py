@@ -411,6 +411,15 @@ def parse_response(raw: str) -> list[Proposal]:
     return [Proposal.from_json(d) for d in items if isinstance(d, dict) and d.get("summary")]
 
 
+def claim_key(summary: str) -> str:
+    """The claim's identity: its summary with whitespace collapsed and case folded.
+
+    One definition, because two callers decide "is this the same claim": `dedupe_proposals` within a
+    batch, and the hook across chunks now that each chunk is applied as it finishes (#111).
+    """
+    return " ".join(str(summary).split()).lower()
+
+
 def dedupe_proposals(proposals: list) -> list:
     """Union per-chunk proposals, dropping a summary an earlier chunk already produced.
 
@@ -422,7 +431,7 @@ def dedupe_proposals(proposals: list) -> list:
     seen: set[str] = set()
     kept = []
     for proposal in proposals:
-        key = " ".join(str(proposal.summary).split()).lower()
+        key = claim_key(proposal.summary)
         if key in seen:
             continue
         seen.add(key)

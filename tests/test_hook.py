@@ -181,3 +181,68 @@ def test_the_cli_honours_the_dry_run_env_var(cfg, capsys, monkeypatch, tmp_path)
     assert "summary" in out.lower(), "dry run prints the prompt, which carries the vault's summaries"
     assert _entries(cfg) == []
 
+
+
+# --- #111: a chunk failure must not throw away the chunks that already landed -------------------
+
+class _FlakyProvider:
+    """Answers the first `ok_chunks` calls, then raises. Counts calls so a retry can be inspected."""
+
+    def __init__(self, ok_chunks: int, summaries: list[str]):
+        self.ok_chunks = ok_chunks
+        self.summaries = summaries
+        self.calls = 0
+
+    def complete(self, prompt: str) -> str:
+        self.calls += 1
+        if self.calls > self.ok_chunks:
+            raise ValueError("Expecting ':' delimiter: line 9 column 3 (the model mangled the JSON)")
+        summary = self.summaries[(self.calls - 1) % len(self.summaries)]
+        return json.dumps({"entries": [{
+            "kind": "fact", "summary": summary, "evidence": "fixture", "importance": 0.9,
+            "ask": "what happened?", "entities": [], "edges": [], "confidence": 0.8}]})
+
+
+def _chunked_transcript(tmp_path, chunks: int = 3):
+    turns = "\n".join(f"user: turn {i} " + "y" * 200 for i in range(chunks * 2))
+    path = tmp_path / "chunked.md"
+    path.write_text(turns, encoding="utf-8")
+    return path
+
+
+def test_a_failure_on_a_later_chunk_keeps_what_landed(tmp_path):
+    cfg = load(tmp_path / "vault", create=True)
+    provider = _FlakyProvider(ok_chunks=1, summaries=["claim from the first chunk", "two", "three"])
+
+    with pytest.raises(hook_mod.HookError) as caught:
+        hook_mod.run(cfg, _chunked_transcript(tmp_path), provider, session="sess-111", max_chars=400)
+
+    assert "chunk 2 of" in str(caught.value), str(caught.value)
+    assert "1 chunk(s) applied" in str(caught.value)
+    written = [e.summary for e in _entries(cfg)]
+    assert written == ["claim from the first chunk"], f"the landed chunk must survive, got {written}"
+
+
+def test_a_retry_reads_only_the_chunks_that_did_not_land(tmp_path):
+    cfg = load(tmp_path / "vault", create=True)
+    transcript = _chunked_transcript(tmp_path)
+    first = _FlakyProvider(ok_chunks=1, summaries=["claim from the first chunk", "two", "three"])
+    with pytest.raises(hook_mod.HookError):
+        hook_mod.run(cfg, transcript, first, session="sess-111", max_chars=400)
+    assert first.calls == 2, "the first attempt reads chunk 1 and fails on chunk 2"
+
+    total = len(promote_mod.chunk_transcript(
+        hook_mod.read_transcript(transcript), 400))
+    second = _FlakyProvider(ok_chunks=99, summaries=["claim from the first chunk", "two", "three"])
+    result = hook_mod.run(cfg, transcript, second, session="sess-111", max_chars=400)
+
+    assert second.calls == total - 1, (
+        f"the retry must skip the {total}-chunk pass's first chunk, made {second.calls} calls for "
+        f"{total} chunks")
+    assert result.resumed == 1, f"one chunk was resumed, got {result.resumed}"
+    # the fake reuses three summaries across `total` chunks, so the count proves two things at once:
+    # every remaining chunk was read, and a claim the resumed chunk already wrote is not written again
+    assert sum(1 for e in _entries(cfg) if e.summary == "claim from the first chunk") == 1
+    assert len({e.summary for e in _entries(cfg)}) == len(_entries(cfg)), "no claim twice"
+    assert sum(1 for e in _entries(cfg) if e.summary == "claim from the first chunk") == 1
+    assert "1 resumed" in result.line()

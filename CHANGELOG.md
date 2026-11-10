@@ -79,6 +79,13 @@ truth and a migration is the user's data.
   now decides claim identity for the audit, the supersedes closure and the rebuild fold, all through the
   existing `identity()`.
 
+- **a chunk is written when it finishes, and a retry reads only what is missing** (#111). The pass
+  gathered every chunk's proposals and applied them once at the end, so a failure on chunk 3 of 24 threw
+  away chunks 1 and 2 — measured twice on 24-chunk sessions, and a 70-chunk session would have lost 19
+  chunks per attempt. Each chunk is now applied and recorded (`<vault>/.quipu/chunks/<session>.json`,
+  keyed by the chunk's text), the failure names the chunk and how many landed, and a claim an earlier
+  chunk wrote is never written again by a later one.
+
 ### Known at this version
 
 - the live vault on this box still holds **4 index-only edges** until `quipu repair --edges --apply` is run
