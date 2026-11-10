@@ -93,3 +93,20 @@ def test_stats_reports_the_evidence_mix(cfg):
     report = export_mod.dataset_report(cfg)
     assert report["evidence_by_kind"] == {"command": 1, "claim": 1}
     assert report["evidence_bytes"]["min"] > 0
+
+
+def test_the_reflection_prompt_asks_for_a_pointer_not_a_restatement():
+    """The rule that moved the measured mix, pinned so a prompt edit cannot quietly undo it (#109).
+
+    Measured on one fixed 89 KB transcript, same model and chunking, before and after: claim 63% → 50%,
+    median evidence 74 B → 110 B, entries 35 → 36, and the pass took 629 s → 318 s.
+    """
+    from quipu.promote import PROMPT_PATH
+
+    prompt = PROMPT_PATH.read_text(encoding="utf-8")
+    flat = " ".join(prompt.split())  # the rules are prose: line wrapping is not part of them
+    assert "RE-RUN or OPEN" in flat
+    assert "A bare number is NOT evidence" in flat
+    assert "no re-checkable evidence in the session" in flat
+    # and the JSON example must not invite a number back in
+    assert "number / command / path / log line" not in flat

@@ -6,7 +6,16 @@ truth and a migration is the user's data.
 
 ## Unreleased
 
-Nothing yet.
+### Changed
+
+- **the reflection prompt asks for a pointer, not a restatement** (#109). The rule read "a number, a
+  command, a file path, a log line, a URL" — and a number is not re-checkable, so 58% of the corpus
+  classified as `claim` while being told its evidence was fine. It now asks for something a skeptic can
+  RE-RUN or OPEN, states that a bare number belongs in the summary, and allows the honest sentence "no
+  re-checkable evidence in the session" instead of a restatement dressed as proof.
+  Measured on one fixed 89 KB transcript, same model and chunking, before and after: **claim share 63% →
+  50%**, median evidence **74 B → 110 B**, entries 35 → 36 (recall unchanged), and the pass took **629 s →
+  318 s**. A prompt-only change: no code, no write path, no vault shape.
 
 ## 0.6.0 — 2026-11-10
 

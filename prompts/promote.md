@@ -13,8 +13,14 @@ contains no real outcome, return `{"entries": []}` — an empty result is a vali
 
 `summary` must be a complete statement, not a topic: "TRX40 needs DOCP 3200 for stability because
 3600 produced 649 CCE events in one boot", not "RAM tuning".
-`evidence` must be the proof a skeptic could re-check: a number, a command, a file path, a log line,
-a URL. No evidence means the entry is not promoted, so an entry without evidence is nearly worthless.
+`evidence` must be something a skeptic can RE-RUN or OPEN — not a restatement of the finding:
+- a command whose output shows it: `nvidia-smi` reported 3 cards, 10617 MiB each
+- a file and line: quipu/hook.py:76 (the pass budget), docs/USING.md:436
+- a log line: ~/admin/logs/quipu-capture.log — "21:46:36 ok glitch/local-c1a3 907s, 24 chunks"
+- a URL: https://github.com/AgentOrange81/quipu/actions/runs/42897600261
+A bare number is NOT evidence: "acceptance 0.697 vs 0.871" or "378 passed" belongs in `summary`, not in
+`evidence`. If the transcript shows no such pointer, write the honest sentence — "no re-checkable
+evidence in the session" — rather than a restatement that looks like proof.
 `importance`: 0.9+ for a hard-won decision or a trap that cost time; 0.5–0.8 for a useful fact;
 below 0.5 for background.
 `ask`: the user request this entry answers, quoted or tightly paraphrased — this is the prompt half
@@ -34,7 +40,7 @@ Return ONLY a JSON object, no prose and no code fences:
     "kind": "decision",
     "summary": "one complete statement",
     "body": "the detail and reasoning, 2-6 sentences",
-    "evidence": "number / command / path / log line that proves it",
+    "evidence": "the command, path:line, log line or URL that proves it",
     "importance": 0.85,
     "confidence": 0.9,
     "ask": "the user request this answers",
