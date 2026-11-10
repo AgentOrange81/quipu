@@ -23,8 +23,6 @@ import subprocess
 import sys
 from pathlib import Path
 
-import pytest
-
 from quipu import graph as graph_mod
 from quipu import index as index_mod
 from quipu.store import parse_edge_spec, read_entry
@@ -253,15 +251,6 @@ CREATE TABLE events(
 """
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="follow-up to #23/#24 (PR #36); no dedicated issue in the repo's catalog. A migrated "
-    "old db backfills the identity key, but `timeline` silently reports an EMPTY graph: "
-    "assert len(before) == 1 fails with 0, because resolve() maps the query to the STORED "
-    "display name ('TRX40') while the old edge rows keep the spelling they were written with "
-    "('trx40'), and nothing resolves between the two. On top, the first rebuild() after a fold "
-    "reads a stale entries dict and asserts 0 edges (folded=1 but the cleared db stays empty), "
-    "so the recovered belief only re-appears on a second rebuild")
 def test_old_schema_db_connects_and_rebuild_recovers(cfg):
     """A migrated old db must still answer its own history and be recoverable by rebuild.
 

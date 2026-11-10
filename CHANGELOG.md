@@ -106,6 +106,15 @@ truth and a migration is the user's data.
   of it a skeptic could re-check. `quipu stats` reports the mix and the size distribution;
   `export sft --evidence-kind/--min-evidence-bytes` holds a training set to the strong half.
 
+- **a migrated vault answers its own history** (#122). Two defects, both encoded as a strict `xfail` for
+  months and now fixed: `resolve()` returned the entities table's remembered name, so `timeline('TRX40')`
+  found nothing while the rows held `trx40` — queries now build a candidate set from every spelling the
+  vault knows (name, display form, aliases) and keep the rows the entities table says belong, because
+  `identity()` alone cannot decide it: the stored name is `display_name()` of the first spelling seen,
+  and that drops what it cannot romanise (`Café` → `caf`). And `rebuild()` planned its replay from an
+  entries dict read *before* the fold, so a folded belief needed a SECOND rebuild to come back; the fold
+  now refreshes the plan. The suite carries no known-defect markers any more.
+
 ### Known at this version
 
 - the live vault on this box still holds **4 index-only edges** until `quipu repair --edges --apply` is run
