@@ -295,3 +295,34 @@ def test_a_naming_lookup_that_fails_does_not_fail_the_pass(tmp_path, monkeypatch
     result = hook_mod.run(cfg, _transcript(tmp_path), Answers(), session="s-fallback")
     assert result.promoted == 1
     assert _entries(cfg)[0].model in ("", "local")
+
+
+def test_the_index_carries_what_the_markdown_records(tmp_path):
+    """#126 follow-up: the pass ends with a rebuild, so the derived columns must be filled then.
+
+    Measured on the live vault while checking the backfill: a read of `.quipu/index.db` straight after
+    a pass returned NULL `evidence_kind` and `model` on every entry the pass had written, while the
+    markdown carried both. The columns were correct again after an explicit `reindex`, so the reader
+    had raced the rebuild — but a reader cannot tell those apart, and the invariant at stake is the
+    project's whole premise: delete the index and rebuild it, and nothing is lost.
+    """
+    import sqlite3
+
+    cfg = load(tmp_path / "vault", create=True)
+
+    class Named:
+        model = "qwen3.6-35b-a3b"
+
+        def complete(self, prompt: str) -> str:
+            return json.dumps({"entries": [dict(PROPOSAL)]})
+
+    hook_mod.run(cfg, _transcript(tmp_path), Named(), agent="glitch", session="s-index")
+    (entry,) = _entries(cfg)
+    assert entry.evidence_kind, "the entry itself must know what its evidence is"
+
+    c = sqlite3.connect(cfg.db_path)
+    try:
+        row = c.execute("SELECT model, evidence_kind FROM entries WHERE id = ?", (entry.id,)).fetchone()
+    finally:
+        c.close()
+    assert row == ("qwen3.6-35b-a3b", entry.evidence_kind), row
