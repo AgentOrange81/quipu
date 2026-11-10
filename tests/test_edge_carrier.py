@@ -145,3 +145,36 @@ def test_an_empty_subject_is_refused(vault):
     assert proc.returncode == 2, proc.stdout + proc.stderr
     assert "non-empty" in proc.stderr
     assert edge_rows(vault) == []
+
+
+# --- #115: one claim, three correct spellings -----------------------------------------------------
+# The markdown keeps the model's prose, add_edge stores a slug and a rebuild stores the identity key.
+# Comparing spellings made audit report nine live edges as unrecorded, and a rebuild minted a second
+# row for each. These are the four pairs measured on the live vault.
+
+@pytest.mark.parametrize("db_form, markdown_form", [
+    ("quipu:blocks:memoryprovider", "quipu:blocks:memory-provider"),
+    ("flash-next:supersedes:launch-flashnext", "flashnext:supersedes:launch-flashnext"),
+    ("gpu1:located_in:trx40-pro-s", "GPU 1:located_in:TRX40-PRO S"),
+    ("coder-xxs:implements:qwen3-8-flash-next-iq3-xxs",
+     "coder-xxs:implements:qwen3.8-flash-next-iq3_xx_s"),
+    ("n-gram:measured_as:context-echo", "ngram:measured_as:context-echo"),
+])
+def test_a_claim_is_recognised_across_spellings(vault, db_form, markdown_form):
+    from quipu.store import Entry, find_entry, read_entry, write_entry
+    root = vault / "vault"
+    cfg = config_mod.load(root, create=True)
+    entry = Entry(id="beef1234", state="promoted", summary="the claim", evidence="fixture",
+                  edges=[markdown_form])
+    write_entry(root, entry)
+    loaded = read_entry(find_entry(root, "beef1234"))
+    assert graph_mod.entry_records_edge(loaded, db_form), (
+        f"the db spelling {db_form!r} is the same claim as the markdown's {markdown_form!r}")
+
+    # and the same claim asserted from the db spelling lands as one row, not two
+    src, predicate, dst = db_form.split(":")
+    graph_mod.add_edge(cfg, src, predicate, dst, note_id="beef1234")
+    graph_mod.rebuild(cfg)
+    with sqlite3.connect(cfg.db_path) as c:
+        rows = c.execute("SELECT src, predicate, dst FROM edges").fetchall()
+    assert len(rows) == 1, f"one claim must be one row, got {rows}"

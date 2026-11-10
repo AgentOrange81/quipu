@@ -56,6 +56,19 @@ def identity(name: str) -> str:
     return "unknown-" + hashlib.sha256(raw.encode("utf-8")).hexdigest()[:8]
 
 
+def edge_key(src: str, predicate: str, dst: str) -> tuple[str, str, str]:
+    """The identity of a claim: predicate plus both endpoints under `identity()`.
+
+    Both surfaces spell entities their own way and all three spellings are correct in context:
+    the markdown keeps the model's prose ("GPU 1"), `add_edge` stores the slug ("gpu-1"), and a
+    rebuild can store the identity key ("gpu1"). Comparing spellings reported nine live edges as
+    "in the index but not in the markdown" that the markdown did record (#115), and a rebuild then
+    minted a second row for each. Comparing identities is the only comparison that is stable under
+    all three: `identity()` already exists to decide when two names are one entity.
+    """
+    return (predicate, identity(src), identity(dst))
+
+
 def display_name(name: str) -> str:
     """The display form of a name: its ASCII slug when it has one, itself when it has not.
 
@@ -199,13 +212,13 @@ def entry_records_edge(entry: Entry, spec: str) -> bool:
         src, predicate, dst = parse_edge_spec(spec)
     except ValueError:
         return False
+    key = edge_key(src, predicate, dst)
     for raw in entry.edges:
         try:
             s2, p2, d2 = parse_edge_spec(raw)
         except ValueError:
             continue
-        if (p2 == predicate and display_name(s2) == display_name(src)
-                and display_name(d2) == display_name(dst)):
+        if edge_key(s2, p2, d2) == key:
             return True
     return False
 
@@ -396,7 +409,7 @@ def _asserted_triples(entry: Entry) -> set[tuple[str, str, str]]:
             src, predicate, dst = parse_edge_spec(spec)
         except ValueError:
             continue
-        out.add((predicate, display_name(src), display_name(dst)))
+        out.add(edge_key(src, predicate, dst))
     return out
 
 
@@ -428,7 +441,7 @@ def close_superseded(cfg: Config, old_ids, new_entry: Entry, at: str | None = No
         finally:
             c.close()
         for row in rows:
-            triple = (row["predicate"], display_name(row["src"]), display_name(row["dst"]))
+            triple = edge_key(row["src"], row["predicate"], row["dst"])
             if triple in keep:
                 continue
             if (row["valid_from"] or "") > at:
@@ -738,7 +751,7 @@ def rebuild(cfg: Config) -> dict:
                 s, p, d = parse_edge_spec(rep)
             except ValueError:
                 continue
-            replacement_start[(p, display_name(s), display_name(d))] = closure.get("at", "")
+            replacement_start[edge_key(s, p, d)] = closure.get("at", "")
 
     # asserted in the order the windows open, so the edge ids come out the same as they did. A
     # replacement always follows the edge it replaced: they can share a second, and the original
@@ -761,7 +774,7 @@ def rebuild(cfg: Config) -> dict:
                 skipped.append(f"{e.id}: {spec!r} (predicate {predicate!r} is not in the "
                                f"vocabulary; add it to {cfg.config_path})")
                 continue
-            key = (predicate, display_name(src), display_name(dst))
+            key = edge_key(src, predicate, dst)
             at = replacement_start.get(key) or e.created
             plan.append((at, key in replacement_start, e.created, e.id, src, predicate, dst, e.id))
     plan.sort(key=lambda p: (p[0], p[1], p[2], p[3]))

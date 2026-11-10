@@ -72,6 +72,13 @@ truth and a migration is the user's data.
   `vector:implements:gpt-oss:120b` (four parts, unparseable on replay) while the graph held the sanitised
   `gpt-oss-120b` — one claim in two shapes, and `audit` reporting both. One filtered list now feeds both.
 
+- **one claim has one identity across three correct spellings** (#115). The markdown keeps the model's
+  prose (`GPU 1`), `add_edge` stores a slug (`gpu-1`) and a rebuild stores the identity key (`gpu1`), so
+  `entry_records_edge` compared spellings and `audit` reported nine live edges as "in the index but not in
+  the markdown" that the markdown did record — and a rebuild minted a second row for each. `edge_key()`
+  now decides claim identity for the audit, the supersedes closure and the rebuild fold, all through the
+  existing `identity()`.
+
 ### Known at this version
 
 - the live vault on this box still holds **4 index-only edges** until `quipu repair --edges --apply` is run
