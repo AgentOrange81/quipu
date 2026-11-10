@@ -98,6 +98,14 @@ truth and a migration is the user's data.
   endpoint's `/models` once per pass and records the alias (`qwen3.6-35b-a3b` on this box); a failed
   lookup falls back to the configured name and never blocks the write.
 
+- **evidence is classified, not judged** (#109). The gate asks whether evidence exists, and a 9-byte
+  `see log` answered it as well as a line range did — measured: reflected promoted entries run to a
+  median of 151 B, 14% under 60, floor 9. `Entry.evidence_kind` now records what the evidence IS
+  (`command`, `path`, `url`, `claim`), classified deterministically from the evidence text itself, and
+  indexed. Nothing is refused: a weak memory is still a memory, and the corpus can finally say how much
+  of it a skeptic could re-check. `quipu stats` reports the mix and the size distribution;
+  `export sft --evidence-kind/--min-evidence-bytes` holds a training set to the strong half.
+
 ### Known at this version
 
 - the live vault on this box still holds **4 index-only edges** until `quipu repair --edges --apply` is run

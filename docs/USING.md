@@ -106,6 +106,22 @@ A topic cannot be checked; a statement can. No evidence means the entry is not p
 an `ask` shorter than 20 characters or under three words is dropped — a conversation turn, not a
 prompt.
 
+**The gate asks whether evidence exists; `evidence_kind` records what it is.** Every entry written from
+a proposal gets one, classified from its own evidence text — no model call, no drift:
+
+| kind | means | example |
+|---|---|---|
+| `command` | something a person could re-run | `` `quipu reindex` dropped it `` |
+| `path` | something a person could open | `quipu/hook.py:76` |
+| `url` | something a person could fetch | `https://…/runs/42715230290` |
+| `claim` | prose that points at nothing re-checkable | `see log` |
+
+`claim` is not a rejection: a 9-byte "see log" is a weak memory, not a false one, and refusing it would
+lose the claim while still leaving the corpus unable to say how much of it is re-checkable. It is
+recorded, indexed, and filterable: `quipu stats` reports the mix and the evidence-size distribution, and
+`quipu export sft` takes `--evidence-kind command,path,url` and `--min-evidence-bytes 60` to hold the
+training set to the strong half without touching the vault — filtering is a view, not a delete.
+
 ## Correcting something
 
 When you learn an entry was wrong, do not edit it and do not delete it. Write the new version and
@@ -550,7 +566,7 @@ needs a budget larger than 240 s.
 
 | command | when you want it | what each record carries |
 |---|---|---|
-| `quipu export sft --out data/sft.jsonl` | supervised fine-tuning examples | `messages` — an optional system prompt (`--system`), then the `ask` as the user turn and summary + evidence + body as the assistant turn — plus `meta` with entry id, kind, state, agent, project, session, created, confidence, importance, source |
+| `quipu export sft --out data/sft.jsonl` | supervised fine-tuning examples | `messages` — an optional system prompt (`--system`), then the `ask` as the user turn and summary + evidence + body as the assistant turn — plus `meta` with entry id, kind, state, agent, project, session, created, confidence, importance, source, evidence_kind, evidence_bytes. `--evidence-kind` and `--min-evidence-bytes` narrow the set to entries a skeptic could actually re-check |
 | `quipu export dpo --out data/dpo.jsonl` | preference pairs from corrections | `prompt`, `chosen`, `rejected`, and `meta` carrying the new entry, the superseded entry, and the deciding evidence as `reason` |
 | `quipu export graph --out data/graph` | the entity/relation graph as data | `nodes.jsonl` (entities, every spelling seen kept as `aliases`) and `edges.jsonl` (src, predicate, dst, note id, confidence, validity window, `live` flag) |
 

@@ -15,6 +15,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from . import KINDS
+from . import evidence as evidence_mod
 from .config import DEFAULT_LLM_TIMEOUT, Config
 from .graph import add_edge, close_superseded, ensure_entity
 from .index import connect
@@ -515,6 +516,9 @@ def apply(proposals: list[Proposal], cfg: Config, agent: str = "", project: str 
         e = Entry(
             kind=p.kind, state="promoted" if promoted else "raw", agent=agent, project=project,
             session=session, model=model,
+            # derived, never asked of the model: a declared kind would be another unverifiable claim,
+            # while the evidence text itself is right there (#109)
+            evidence_kind=evidence_mod.classify(p.evidence),
             confidence=p.confidence, importance=p.importance,
             source=source or "reflect", ask=p.ask, summary=p.summary, evidence=p.evidence,
             supersedes=kept_supersedes, tags=p.tags, edges=specs, body=p.body,

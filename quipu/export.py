@@ -23,6 +23,7 @@ def _meta(e: Entry, **extra) -> dict:
             "entry": e.id, "kind": e.kind, "state": e.state, "agent": e.agent,
             "project": e.project, "session": e.session, "created": e.created,
             "confidence": e.confidence, "importance": e.importance, "source": e.source,
+            "evidence_kind": e.evidence_kind, "evidence_bytes": len(e.evidence.encode("utf-8")),
         },
         **extra,
     }
@@ -48,13 +49,23 @@ def _answer(e: Entry) -> str:
     return "\n\n".join(p for p in parts if p)
 
 
-def export_sft(cfg: Config, out: Path, system: str | None = None) -> int:
-    """promoted entries that record the request they answer become (ask -> answer) pairs."""
+def export_sft(cfg: Config, out: Path, system: str | None = None,
+               evidence_kinds: set[str] | None = None, min_evidence_bytes: int = 0) -> int:
+    """promoted entries that record the request they answer become (ask -> answer) pairs.
+
+    `evidence_kinds` and `min_evidence_bytes` filter the training set without touching the vault: an
+    entry with `evidence_kind: claim` is a memory worth keeping and a weaker training target (#109).
+    The field is recorded either way, so the same corpus can be exported at two strengths.
+    """
     n = 0
     out.parent.mkdir(parents=True, exist_ok=True)
     with out.open("w", encoding="utf-8") as fh:
         for _path, e in iter_entries(cfg.root):
             if e.state != "promoted" or not e.summary or not _ask_ok(e):
+                continue
+            if evidence_kinds and e.evidence_kind not in evidence_kinds:
+                continue
+            if len(e.evidence.encode("utf-8")) < min_evidence_bytes:
                 continue
             messages = []
             if system:
@@ -120,6 +131,18 @@ def dataset_report(cfg: Config) -> dict:
     c.close()
     from . import graph as graph_mod  # local import: graph imports index, so a top-level one cycles
     graph_report = graph_mod.connectivity(cfg)
+    # #109: what the evidence IS, so "present" and "re-checkable" stop being the same word
+    kinds = {}
+    for e in promoted:
+        key = e.evidence_kind or "unclassified"
+        kinds[key] = kinds.get(key, 0) + 1
+    sizes = sorted(len(e.evidence.encode("utf-8")) for e in with_evidence)
+    evidence_bytes = {
+        "min": sizes[0] if sizes else 0,
+        "median": sizes[len(sizes) // 2] if sizes else 0,
+        "p90": sizes[int(len(sizes) * 0.9)] if sizes else 0,
+        "max": sizes[-1] if sizes else 0,
+    }
     return {
         "entries": len(entries),
         "promoted": len(promoted),
@@ -127,6 +150,8 @@ def dataset_report(cfg: Config) -> dict:
         "pruned": sum(1 for e in entries if e.state == "pruned"),
         "sft_examples": len(sft),
         "promoted_with_evidence": len(with_evidence),
+        "evidence_by_kind": kinds,
+        "evidence_bytes": evidence_bytes,
         "preference_pairs": pairs,
         "edges_live": live,
         "edges_closed": closed,
