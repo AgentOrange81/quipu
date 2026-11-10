@@ -120,12 +120,56 @@ def ensure_entity(c: sqlite3.Connection, name: str, kind: str = "thing", aliases
 
 
 def resolve(cfg: Config, name: str) -> str:
-    """Map any spelling to the stored display name (queries must go through this)."""
+    """Map any spelling to the form edge rows are written in (queries must go through this).
+
+    Rows are written with the name `ensure_entity` remembers (one name per identity, so 'Next.js'
+    and 'nextjs' cannot become two nodes), while a migrated vault's older rows keep whatever
+    spelling they were written with. Both are the same claim, so the queries below build a candidate
+    set from every spelling this vault knows and then compare by `identity()` (#122).
+    """
     c = connect(cfg.db_path)
-    row = c.execute("SELECT name FROM entities WHERE key = ? OR name = ?",
-                    (identity(name), display_name(name))).fetchone()
-    c.close()
+    try:
+        row = c.execute("SELECT name FROM entities WHERE key = ? OR name = ?",
+                        (identity(name), display_name(name))).fetchone()
+    finally:
+        c.close()
     return row[0] if row else display_name(name)
+
+
+def _spellings(cfg: Config, name: str) -> list[str]:
+    """Every spelling this vault might have written for one identity.
+
+    Used to build the SQL candidate set; the rows are then filtered by `identity()`, because a
+    migration cannot rewrite history and a query that trusts one spelling reports an empty graph
+    (#122).
+    """
+    spellings = {name, display_name(name)}
+    c = connect(cfg.db_path)
+    try:
+        row = c.execute("SELECT name, aliases FROM entities WHERE key = ? OR name = ?",
+                        (identity(name), display_name(name))).fetchone()
+    finally:
+        c.close()
+    if row:
+        spellings.add(row[0])
+        try:
+            spellings.update(json.loads(row[1] or "[]"))
+        except ValueError:
+            pass
+    return sorted(s for s in spellings if s)
+
+
+def _identity_rows(rows, spellings: list[str]) -> list[dict]:
+    """Rows that touch this identity, judged by the vault's OWN membership, not by string equality.
+
+    `identity()` alone is not enough to filter here, and the reason is worth remembering: the stored
+    name is `display_name()` of the first spelling seen, and that drops what it cannot romanise —
+    `Café` is stored as `caf`, whose identity is `caf`, not `cafe`. The entities table keeps the
+    spelling and the key, so IT is the authority on which strings are one node; this keeps the rows
+    that a spelling list says belong.
+    """
+    pool = set(spellings)
+    return [dict(r) for r in rows if r["src"] in pool or r["dst"] in pool]
 
 
 # --- the graph lives in the markdown (#24) ------------------------------------------------
@@ -494,20 +538,24 @@ def invalidate(cfg: Config, edge_id: int, at: str | None = None) -> None:
 
 def timeline(cfg: Config, entity: str, at: str | None = None) -> list[dict]:
     """Edges touching `entity`, optionally as known at a point in time."""
-    entity = resolve(cfg, entity)
+    spellings = _spellings(cfg, entity)
+    marks = ",".join("?" * len(spellings))
     c = connect(cfg.db_path)
-    if at:
-        rows = c.execute(
-            "SELECT * FROM edges WHERE (src = ? OR dst = ?) AND valid_from <= ? "
-            "AND (valid_to IS NULL OR valid_to > ?) ORDER BY valid_from",
-            (entity, entity, at, at),
-        ).fetchall()
-    else:
-        rows = c.execute(
-            "SELECT * FROM edges WHERE src = ? OR dst = ? ORDER BY valid_from", (entity, entity)
-        ).fetchall()
-    c.close()
-    return [dict(r) for r in rows]
+    try:
+        if at:
+            rows = c.execute(
+                f"SELECT * FROM edges WHERE (src IN ({marks}) OR dst IN ({marks})) "
+                "AND valid_from <= ? AND (valid_to IS NULL OR valid_to > ?) ORDER BY valid_from",
+                (*spellings, *spellings, at, at),
+            ).fetchall()
+        else:
+            rows = c.execute(
+                f"SELECT * FROM edges WHERE src IN ({marks}) OR dst IN ({marks}) "
+                "ORDER BY valid_from", (*spellings, *spellings),
+            ).fetchall()
+    finally:
+        c.close()
+    return _identity_rows(rows, spellings)
 
 
 def project_entries(cfg: Config, name: str, include_pruned: bool = False) -> list[dict]:
@@ -597,32 +645,36 @@ def neighbors(cfg: Config, entity: str, depth: int = 1, include_pruned: bool = F
     `entries` is the project-hub view (#85) and is empty for an entity that is not a project tag.
     """
     entity = resolve(cfg, entity)
-    seen = {entity}
+    seen = {identity(entity)}
     edges: list[dict] = []
     frontier = [entity]
     c = connect(cfg.db_path)
     for _ in range(max(1, depth)):
         nxt: list[str] = []
         for node in frontier:
-            for r in c.execute(
-                "SELECT * FROM edges WHERE valid_to IS NULL AND (src = ? OR dst = ?)", (node, node)
-            ).fetchall():
-                d = dict(r)
+            spellings = _spellings(cfg, node)
+            marks = ",".join("?" * len(spellings))
+            found = c.execute(
+                f"SELECT * FROM edges WHERE valid_to IS NULL AND (src IN ({marks}) OR dst IN ({marks}))",
+                (*spellings, *spellings),
+            ).fetchall()
+            for d in _identity_rows(found, spellings):
                 if d["id"] in {e["id"] for e in edges}:
                     continue
                 edges.append(d)
                 for n in (d["src"], d["dst"]):
-                    if n not in seen:
-                        seen.add(n)
+                    key = identity(n)
+                    if key not in seen:
+                        seen.add(key)  # the frontier carries identity, not a spelling
                         nxt.append(n)
         frontier = nxt
-    ents = {r["name"]: dict(r) for r in c.execute("SELECT * FROM entities").fetchall()}
+    ents = {identity(r["name"]): dict(r) for r in c.execute("SELECT * FROM entities").fetchall()}
     c.close()
     # an entry id is also a node worth asking about: what cites it, and what it cites (#85)
     known_ids = {e.id for _p, e in iter_entries(cfg.root)}
     cites = citations(cfg, entity) if entity in known_ids else {"entry": entity, "cites": [],
                                                                "cited_by": []}
-    return {"nodes": [ents.get(n, {"name": n}) for n in seen], "edges": edges,
+    return {"nodes": [ents.get(key, {"name": key}) for key in sorted(seen)], "edges": edges,
             "entries": project_entries(cfg, entity, include_pruned=include_pruned),
             "citations": cites}
 
@@ -721,6 +773,12 @@ def rebuild(cfg: Config) -> dict:
         if not any(entry_records_edge(e, spec) for e in candidates):
             record_edge(cfg, entry.id, spec)
             folded += 1
+            # The plan below is built from `entries`, which was read BEFORE this fold. Without
+            # refreshing it the fold was invisible for a pass: `folded=1` and the cleared db stayed
+            # empty, so the recovered belief only reappeared on a SECOND rebuild (#122).
+            path = find_entry(cfg.root, entry.id)
+            if path is not None:
+                entries[entry.id] = read_entry(path)
         if row["valid_to"]:
             replacement = ""
             cand = opened_at.get((row["src"], row["predicate"], row["valid_to"]))
