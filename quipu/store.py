@@ -233,6 +233,7 @@ class Entry:
     confidence: float = 0.5
     importance: float = 0.0
     source: str = ""
+    model: str = ""
     ask: str = ""
     summary: str = ""
     evidence: str = ""
@@ -274,6 +275,10 @@ class Entry:
             f"importance: {self.importance}",
             f"source: {_scalar(self.source)}",
         ]
+        # which model wrote this. It exists only at write time — a quant swap or a provider change
+        # leaves every older entry looking like it came from the same mind (#110).
+        if self.model:
+            head.append(f"model: {_scalar(self.model)}")
         # summary and evidence belong in the frontmatter, not only in the body: the body copy is for
         # humans, while from_markdown/exports read the fields. Writing them body-only silently lost
         # evidence on every round-trip (which disarmed the promotion gate and the DPO reason).
@@ -348,6 +353,7 @@ class Entry:
             confidence=float(fm.get("confidence") or 0.5),
             importance=float(fm.get("importance") or 0.0),
             source=str(fm.get("source") or ""),
+            model=str(fm.get("model") or ""),
             ask=str(fm.get("ask") or ""),
             summary=str(fm.get("summary") or title),
             evidence=str(fm.get("evidence") or ""),

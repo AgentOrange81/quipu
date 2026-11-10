@@ -246,3 +246,19 @@ def test_a_retry_reads_only_the_chunks_that_did_not_land(tmp_path):
     assert len({e.summary for e in _entries(cfg)}) == len(_entries(cfg)), "no claim twice"
     assert sum(1 for e in _entries(cfg) if e.summary == "claim from the first chunk") == 1
     assert "1 resumed" in result.line()
+
+
+def test_the_hook_records_the_model_that_answered(tmp_path):
+    """#110: `[llm] model` is the literal string 'local', i.e. whatever :8080 serves. An entry that
+    does not name its model cannot say which weights produced it once the quant changes."""
+    cfg = load(tmp_path / "vault", create=True)
+
+    class Named:
+        model = "qwen3.6-35b-a3b"
+
+        def complete(self, prompt: str) -> str:
+            return json.dumps({"entries": [dict(PROPOSAL)]})
+
+    hook_mod.run(cfg, _transcript(tmp_path), Named(), agent="glitch", session="s-model")
+    (entry,) = _entries(cfg)
+    assert entry.model == "qwen3.6-35b-a3b", entry.model

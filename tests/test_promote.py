@@ -200,3 +200,26 @@ def test_a_refused_edge_never_reaches_the_graph_either(cfg):
     on_disk = [p for p in cfg.root.rglob("*.md") if "gpt-oss" in p.read_text(encoding="utf-8")
                and "edges:" in p.read_text(encoding="utf-8")]
     assert on_disk == [], f"no markdown should record a refused spec: {on_disk}"
+
+
+# --- #110: an entry records the model that wrote it ----------------------------------------------
+
+def test_the_model_that_wrote_an_entry_is_recorded_and_survives_a_round_trip(cfg):
+    from quipu import index as index_mod
+    from quipu.store import Entry
+    proposal = {"kind": "fact", "summary": "recorded by a named model", "evidence": "fixture",
+                "importance": 0.9, "ask": "which model wrote this?", "entities": [], "edges": [],
+                "confidence": 0.8}
+    written = promote_mod.apply(promote_mod.parse_response(json.dumps({"entries": [proposal]})), cfg,
+                                model="qwen3.6-35b-a3b")
+    assert written[0].model == "qwen3.6-35b-a3b"
+
+    path = next(cfg.root.glob(f"notes/{written[0].id}*.md"))
+    assert "model: qwen3.6-35b-a3b" in path.read_text(encoding="utf-8")
+    assert Entry.from_markdown(path.read_text(encoding="utf-8")).model == "qwen3.6-35b-a3b"
+
+    index_mod.reindex(cfg.root, cfg.db_path)
+    import sqlite3
+    with sqlite3.connect(cfg.db_path) as c:
+        row = c.execute("SELECT model FROM entries WHERE id = ?", (written[0].id,)).fetchone()
+    assert row and row[0] == "qwen3.6-35b-a3b"
