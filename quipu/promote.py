@@ -488,6 +488,7 @@ def apply(proposals: list[Proposal], cfg: Config, agent: str = "", project: str 
             else:
                 refused_supersedes.append(old_id)
         specs: list[str] = []
+        storable: list[tuple[str, str, str]] = []
         if promoted:
             for src, predicate, dst in p.edges:
                 # a part holding the separator cannot round-trip: "a:b:c:d" re-parses as four parts,
@@ -500,6 +501,7 @@ def apply(proposals: list[Proposal], cfg: Config, agent: str = "", project: str 
                     refused.append(format_edge_spec(src, predicate, dst))
                     continue
                 specs.append(format_edge_spec(src, predicate, dst))
+                storable.append((src, predicate, dst))
         e = Entry(
             kind=p.kind, state="promoted" if promoted else "raw", agent=agent, project=project,
             session=session, confidence=p.confidence, importance=p.importance,
@@ -515,7 +517,12 @@ def apply(proposals: list[Proposal], cfg: Config, agent: str = "", project: str 
                 with c:
                     ensure_entity(c, name, kind)
                 c.close()
-            for src, predicate, dst in p.edges:
+            # Assert exactly what the frontmatter kept. This loop used to walk `p.edges` again, so a
+            # spec refused by the gate above still reached `add_edge`, which records the spec into the
+            # entry's markdown (#112). Measured: entries 3d922801 and cb000190 carried
+            # `vector:implements:gpt-oss:120b` in the markdown and `gpt-oss-120b` in the graph — the
+            # same claim in two shapes, one of which no replay can parse.
+            for src, predicate, dst in storable:
                 try:
                     # the entry's `created` is the window's start, so a rebuild reproduces it
                     add_edge(cfg, src, predicate, dst, note_id=e.id, at=e.created)

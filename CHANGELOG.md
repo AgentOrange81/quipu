@@ -66,6 +66,12 @@ truth and a migration is the user's data.
   subject; the spec parser refuses that shape everywhere else, and only a rebuild dropped the row. Both
   `edge` and `contradict` now refuse an empty subject, predicate or destination at the CLI boundary.
 
+- **a refused edge reaches neither the markdown nor the graph** (#112). `apply()` gated the frontmatter
+  list and then walked the *raw* proposals a second time to assert into the graph, so `add_edge(record=True)`
+  wrote the refused spec back into the entry. Measured live: `cb000190` carried
+  `vector:implements:gpt-oss:120b` (four parts, unparseable on replay) while the graph held the sanitised
+  `gpt-oss-120b` — one claim in two shapes, and `audit` reporting both. One filtered list now feeds both.
+
 ### Known at this version
 
 - the live vault on this box still holds **4 index-only edges** until `quipu repair --edges --apply` is run
