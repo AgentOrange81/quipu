@@ -86,6 +86,12 @@ truth and a migration is the user's data.
   keyed by the chunk's text), the failure names the chunk and how many landed, and a claim an earlier
   chunk wrote is never written again by a later one.
 
+- **an entry records the model that wrote it** (#110). `[llm] model` is the literal string `local`,
+  meaning whatever the endpoint happens to serve; a quant swap or a provider change left every older
+  entry looking like it came from the same mind — and this corpus is training data. `Entry.model` is
+  written to the frontmatter when known, survives `rm .quipu/index.db` + `reindex`, and is queryable in
+  the index (entries written before this keep an empty field, which is the truth rather than a guess).
+
 ### Known at this version
 
 - the live vault on this box still holds **4 index-only edges** until `quipu repair --edges --apply` is run

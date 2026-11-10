@@ -183,13 +183,16 @@ def run(cfg, transcript: str | Path, provider, agent: str = "", project: str = "
         return HookResult(prompt=promote_mod.build_prompt(chunks[0] if chunks else text, cfg,
                                                            _existing(cfg)),
                           seconds=time.monotonic() - started)
+    # which model answered, recorded on every entry it produces: the endpoint's own name when it
+    # reports one, else whatever the vault is configured to call (#110)
+    model_name = str(getattr(provider, "model", "") or cfg.llm_model or "")
     key = session or hashlib.sha256(text.encode("utf-8")).hexdigest()[:16]
     report: dict = {}
     progress = {"written": [], "applied": 0, "resumed": 0}
 
     def apply_chunk(proposals):  # noqa: ANN001 - one chunk's proposals, already deduped
         return promote_mod.apply(proposals, cfg, agent=agent, project=project, session=session,
-                                 source=str(transcript), report=report)
+                                 source=str(transcript), report=report, model=model_name)
 
     try:
         _reflect_streaming(chunks, cfg, provider, timeout, apply_chunk, key, progress)

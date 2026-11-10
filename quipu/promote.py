@@ -462,7 +462,8 @@ def _prose_handle(summary: str, body: str) -> str:
 
 
 def apply(proposals: list[Proposal], cfg: Config, agent: str = "", project: str = "",
-          session: str = "", source: str = "", report: dict | None = None) -> list[Entry]:
+          session: str = "", source: str = "", report: dict | None = None,
+          model: str = "") -> list[Entry]:
     """Write proposals, gated by the promotion threshold.
 
     promoted    importance >= cfg.promote_threshold AND evidence present
@@ -513,7 +514,8 @@ def apply(proposals: list[Proposal], cfg: Config, agent: str = "", project: str 
                 storable.append((src, predicate, dst))
         e = Entry(
             kind=p.kind, state="promoted" if promoted else "raw", agent=agent, project=project,
-            session=session, confidence=p.confidence, importance=p.importance,
+            session=session, model=model,
+            confidence=p.confidence, importance=p.importance,
             source=source or "reflect", ask=p.ask, summary=p.summary, evidence=p.evidence,
             supersedes=kept_supersedes, tags=p.tags, edges=specs, body=p.body,
         )
