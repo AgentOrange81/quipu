@@ -637,7 +637,7 @@ def test_export_sft_record_shape(tmp_path):
     assert roles == ["system", "user", "assistant"]
     assert record["messages"][1]["content"] == "why did the box reboot at 03:02?"
     expected_meta = {"entry", "kind", "state", "agent", "project", "session", "created",
-                     "confidence", "importance", "source"}
+                     "confidence", "importance", "source", "evidence_kind", "evidence_bytes"}
     assert set(record["meta"]["quipu"]) == expected_meta
 
 

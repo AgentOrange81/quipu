@@ -401,7 +401,9 @@ def cmd_export(args) -> int:
     cfg = _cfg(args)
     out = Path(args.out)
     if args.which == "sft":
-        n = export_mod.export_sft(cfg, out, system=args.system)
+        kinds = set(args.evidence_kind.split(",")) if getattr(args, "evidence_kind", "") else None
+        n = export_mod.export_sft(cfg, out, system=args.system, evidence_kinds=kinds,
+                                  min_evidence_bytes=getattr(args, "min_evidence_bytes", 0))
         print(f"{n} sft examples -> {out}")
     elif args.which == "dpo":
         n = export_mod.export_preferences(cfg, out)
@@ -902,6 +904,10 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("which", choices=("sft", "dpo", "graph"))
     s.add_argument("--out", required=True)
     s.add_argument("--system", default=None)
+    s.add_argument("--evidence-kind", default="",
+                   help="sft only: keep these evidence kinds (comma separated: command,path,url,claim)")
+    s.add_argument("--min-evidence-bytes", type=int, default=0,
+                   help="sft only: drop entries whose evidence is shorter than this")
 
     add("reindex", "rebuild the sqlite index", cmd_reindex)
     add("stats", "dataset + graph report", cmd_stats)

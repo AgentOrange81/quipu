@@ -21,7 +21,7 @@ PRAGMA journal_mode=WAL;
 CREATE TABLE IF NOT EXISTS entries(
   id TEXT PRIMARY KEY, path TEXT NOT NULL, kind TEXT, state TEXT, agent TEXT, project TEXT,
   session TEXT, created TEXT, confidence REAL, importance REAL, ask TEXT, summary TEXT,
-  evidence TEXT, body TEXT, model TEXT);
+  evidence TEXT, body TEXT, model TEXT, evidence_kind TEXT);
 
 CREATE VIRTUAL TABLE IF NOT EXISTS entries_fts USING fts5(
   summary, ask, evidence, body, content='entries', content_rowid='rowid',
@@ -68,6 +68,8 @@ def _migrate(c: sqlite3.Connection) -> None:
     entry_cols = {r[1] for r in c.execute("PRAGMA table_info(entries)")}
     if "model" not in entry_cols:
         c.execute("ALTER TABLE entries ADD COLUMN model TEXT")
+    if "evidence_kind" not in entry_cols:
+        c.execute("ALTER TABLE entries ADD COLUMN evidence_kind TEXT")
     from .graph import identity  # local import: graph imports index, so a top-level one cycles
     for row in c.execute("SELECT id, name FROM entities WHERE key IS NULL OR key = ''").fetchall():
         c.execute("UPDATE entities SET key = ? WHERE id = ?", (identity(row["name"]), row["id"]))
@@ -139,11 +141,11 @@ def reindex(root: str | Path, db: str | Path) -> int:
         for path, e in rows:
             c.execute(
                 "INSERT OR REPLACE INTO entries(id,path,kind,state,agent,project,session,created,"
-                "confidence,importance,ask,summary,evidence,body,model) "
-                "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                "confidence,importance,ask,summary,evidence,body,model,evidence_kind) "
+                "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 (e.id, str(Path(path).relative_to(Path(root))), e.kind, e.state, e.agent, e.project,
                  e.session, e.created, e.confidence, e.importance, e.ask, e.summary, e.evidence, e.body,
-                 e.model),
+                 e.model, e.evidence_kind),
             )
         c.execute("INSERT INTO entries_fts(rowid, summary, ask, evidence, body) "
                   "SELECT rowid, summary, ask, evidence, body FROM entries")

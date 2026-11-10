@@ -234,6 +234,7 @@ class Entry:
     importance: float = 0.0
     source: str = ""
     model: str = ""
+    evidence_kind: str = ""
     ask: str = ""
     summary: str = ""
     evidence: str = ""
@@ -285,6 +286,8 @@ class Entry:
         head.append(f"summary: {_scalar(self.summary)}")
         if self.evidence:
             head.append(f"evidence: {_scalar(self.evidence)}")
+        if self.evidence_kind:
+            head.append(f"evidence_kind: {self.evidence_kind}")
         if self.ask:
             head.append(f"ask: {_scalar(self.ask)}")
         if self.supersedes:
@@ -357,6 +360,7 @@ class Entry:
             ask=str(fm.get("ask") or ""),
             summary=str(fm.get("summary") or title),
             evidence=str(fm.get("evidence") or ""),
+            evidence_kind=str(fm.get("evidence_kind") or ""),
             supersedes=list(sup) if isinstance(sup, list) else [str(sup)],
             tags=list(tags) if isinstance(tags, list) else [str(tags)],
             edges=[str(s) for s in edges],
