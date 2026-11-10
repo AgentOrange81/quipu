@@ -92,6 +92,12 @@ truth and a migration is the user's data.
   written to the frontmatter when known, survives `rm .quipu/index.db` + `reindex`, and is queryable in
   the index (entries written before this keep an empty field, which is the truth rather than a guess).
 
+- **the recorded model is what the endpoint serves, not the config's placeholder** (#110).
+  `[llm] model` defaults to the literal string `local`, so a vault configured that way would have written
+  `model: local` on every entry — the placeholder the field exists to avoid. The hook now asks the
+  endpoint's `/models` once per pass and records the alias (`qwen3.6-35b-a3b` on this box); a failed
+  lookup falls back to the configured name and never blocks the write.
+
 ### Known at this version
 
 - the live vault on this box still holds **4 index-only edges** until `quipu repair --edges --apply` is run
