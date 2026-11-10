@@ -178,3 +178,25 @@ def test_an_edge_whose_part_holds_the_separator_is_refused(cfg):
                                 report=report)
     assert written[0].edges == [], "a spec that cannot round-trip is not storable"
     assert report["skipped_edges"] == ["GraphRAG:depends_on:enable_thinking:false"]
+
+
+def test_a_refused_edge_never_reaches_the_graph_either(cfg):
+    """#112: the frontmatter list was gated but the graph-assert loop walked the raw proposals, so
+    `add_edge(record=True)` wrote the refused spec back into the markdown. Measured live: entry
+    cb000190 carried `vector:implements:gpt-oss:120b` (4 parts, unparseable on replay) while the graph
+    held the sanitised `gpt-oss-120b` — two shapes of one claim, and audit reporting both."""
+    from quipu import graph as graph_mod
+    proposal = {
+        "kind": "decision", "summary": "switched the QA lane to gpt-oss:120b",
+        "evidence": "fixture", "importance": 0.9, "ask": "which model runs QA?", "entities": [],
+        "edges": [{"src": "vector", "predicate": "implements", "dst": "gpt-oss:120b"},
+                  {"src": "vector", "predicate": "not_a_predicate", "dst": "something"}],
+        "confidence": 0.8,
+    }
+    written = promote_mod.apply(promote_mod.parse_response(json.dumps({"entries": [proposal]})), cfg)
+    assert written[0].edges == [], written[0].edges
+    live = graph_mod.timeline(cfg, "vector")
+    assert live == [], f"refused edges must not reach the graph, got {live}"
+    on_disk = [p for p in cfg.root.rglob("*.md") if "gpt-oss" in p.read_text(encoding="utf-8")
+               and "edges:" in p.read_text(encoding="utf-8")]
+    assert on_disk == [], f"no markdown should record a refused spec: {on_disk}"
