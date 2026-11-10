@@ -432,11 +432,24 @@ quipu --vault ~/vault hook --transcript session.md --agent glitch --project quip
 It reads the transcript (a path, or `-` for stdin), runs the reflection pass, writes what survives the
 promotion gate, and indexes it. The contract is the exit code, because that is all a framework reads:
 **0 only if the pass completed**, non-zero with the reason on stderr otherwise. A transport error, an
-unparseable response, a missing transcript or a hung endpoint is a failure — and nothing is written
-until the model has answered in full, so a failed pass leaves the vault exactly as it was.
+unparseable response, a missing transcript or a hung endpoint is a failure.
 
-- `--timeout` (default 300 s) bounds the reflection call on a worker thread, because a blocking
-  `urlopen` has no deadline of its own once it is inside a framework's shutdown path.
+A long transcript is chunked, and **each chunk is written as it finishes**, so a failure on chunk 20 of
+24 keeps the nineteen that landed and says so:
+
+```
+reflection failed at chunk 20 of 24: JSONDecodeError: … (19 chunk(s) applied, 64 entries written)
+```
+
+The chunks already applied are recorded in `<vault>/.quipu/chunks/<session>.json`, keyed by the chunk's
+text, so a retry reads only what did not land — and that record is derived state, like the index:
+delete it and the next pass simply re-reads everything. A claim an earlier chunk already wrote is never
+written twice by a later one.
+
+- `--timeout` (default 300 s) bounds **the whole pass**, not one request: three chunks that each take
+  100 s are not a 300 s pass when a framework is waiting on it. Scale it with the chunk count —
+  `--max-chars` decides how many there are — or a long session fails at the deadline however fast the
+  model is. Measured: a 348 KB session is 24 chunks at `--max-chars 12000` and needs ~900 s.
 - `QUIPU_HOOK_DRY_RUN=1` (or `--dry-run`) prints the exact prompt and writes nothing — the way to check
   the hook without spending tokens.
 - A pass that completes but proposes nothing exits 0 and says so on stderr. That is a legitimate
@@ -444,9 +457,8 @@ until the model has answered in full, so a failed pass leaves the vault exactly 
   nothing looks exactly like this.
 
 Measured: a 3 KB transcript against the local `qwen3.6-35b-a3b` took 104 s and proposed nothing (exit 0
-with the warning); a 14 KB transcript hit the endpoint's own read timeout and the hook exited 1
-with `reflection failed: TimeoutError: timed out` and no partial entry. Chunking a long transcript is
-#2, not something the hook should guess at.
+with the warning); a 14 KB transcript hit the endpoint's own read timeout and the hook exited 1 with
+`reflection failed: TimeoutError: timed out`.
 
 ## The provider path: quipu inside Hermes
 

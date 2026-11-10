@@ -16,6 +16,8 @@ The transcript is a path to the session file (Hermes JSONL or plain markdown) or
 """
 from __future__ import annotations
 
+import hashlib
+import json
 import os
 import sys
 import threading
@@ -41,6 +43,7 @@ class HookResult:
     prompt: str = ""
     proposed: int = 0
     chunks: int = 0
+    resumed: int = 0
     seconds: float = 0.0
     skipped_edges: list[str] = field(default_factory=list)
 
@@ -50,8 +53,9 @@ class HookResult:
 
     def line(self) -> str:
         chunks = f" in {self.chunks} chunks" if self.chunks > 1 else ""
+        resumed = f" ({self.resumed} resumed)" if self.resumed else ""
         return (f"{len(self.written)} entries, {self.promoted} promoted, "
-                f"{len(self.written) - self.promoted} raw{chunks}, {self.seconds:.1f}s")
+                f"{len(self.written) - self.promoted} raw{chunks}{resumed}, {self.seconds:.1f}s")
 
 
 def read_transcript(source: str | Path, stdin=None) -> str:
@@ -73,36 +77,95 @@ def _existing(cfg) -> list[str]:
     return [e.summary for _p, e in iter_entries(cfg.root) if e.state == "promoted"]
 
 
-def _reflect_bounded(chunks: list[str], cfg, provider, timeout: float):
-    """Run every chunk on a worker thread so a hung endpoint cannot block session end.
+def _ledger_path(cfg, key: str) -> Path:
+    """Where a transcript's finished chunks are recorded.
 
-    `urlopen(timeout=...)` covers a dead socket, not a server that accepted the request and then
-    stopped talking — and this call sits in a framework's shutdown path, where hanging is the worst
-    outcome available. The budget is for the WHOLE pass, not per chunk: three chunks that each take
-    100 s are not a 300 s pass when the framework is waiting on it.
+    Derived state, like the index: deleting it costs a re-read and nothing else. Keyed by the session
+    id when there is one, so a session that grows between attempts keeps its record.
     """
-    box: dict = {}
-    existing = _existing(cfg)
+    return cfg.root / ".quipu" / "chunks" / f"{key}.json"
 
-    def work():
+
+def _load_ledger(path: Path) -> dict:
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+
+
+def _save_ledger(path: Path, data: dict) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(".json.tmp")
+    tmp.write_text(json.dumps(data, indent=0, sort_keys=True), encoding="utf-8")
+    tmp.replace(path)
+
+
+def _reflect_streaming(chunks: list[str], cfg, provider, timeout: float, apply_chunk,
+                       key: str, progress: dict) -> None:
+    """Read one chunk, apply it, record it — then the next. On a worker thread, bounded by `timeout`.
+
+    The pass used to collect every chunk's proposals and apply them once at the end, so a failure on
+    chunk 3 of 24 discarded the work of chunks 1 and 2 (#111). Measured: two 24-chunk sessions failed
+    and lost everything twice, and a 70-chunk session would have lost 19 chunks per attempt.
+
+    So the unit of work is the chunk: it is applied and recorded before the next request goes out, and
+    a retry skips the chunks whose text has not changed. `urlopen(timeout=...)` covers a dead socket,
+    not a server that accepted the request and stopped talking, which is why the whole loop still sits
+    on a thread with a deadline of its own: a hung endpoint must not hold a session open.
+    """
+    box: dict = {"failed": None}
+    stop = threading.Event()
+    ledger_file = _ledger_path(cfg, key)
+    done = _load_ledger(ledger_file)
+
+    def work() -> None:
+        existing = _existing(cfg)
+        # chunks land as they finish now, so the cross-chunk guard lives here: a claim an earlier
+        # chunk already wrote must not be written again by a later one (#111, and the 8-chunk fixture
+        # that caught it the first time)
+        claimed = {promote_mod.claim_key(s) for s in existing}
+        index = 0
         try:
-            proposals = []
-            for chunk in chunks:
-                proposals.extend(promote_mod.reflect(chunk, cfg, provider, existing))
-            box["proposals"] = proposals
-        except BaseException as exc:  # noqa: BLE001 - reported, not swallowed
+            for index, chunk in enumerate(chunks):
+                if stop.is_set():
+                    return
+                digest = hashlib.sha256(chunk.encode("utf-8")).hexdigest()[:16]
+                prior = done.get(str(index)) or {}
+                if prior.get("sha") == digest:
+                    progress["resumed"] += 1
+                    continue
+                proposals = [p for p in promote_mod.dedupe_proposals(
+                    promote_mod.reflect(chunk, cfg, provider, existing)
+                ) if promote_mod.claim_key(p.summary) not in claimed]
+                if not proposals:
+                    written = []
+                else:
+                    written = apply_chunk(proposals)
+                progress["written"].extend(written)
+                progress["applied"] += 1
+                existing.extend(e.summary for e in written if e.state == "promoted")
+                claimed.update(promote_mod.claim_key(e.summary) for e in written)
+                done[str(index)] = {"sha": digest, "entries": [e.id for e in written]}
+                _save_ledger(ledger_file, done)
+        except BaseException as exc:  # noqa: BLE001 - reported, never swallowed
+            box["failed"] = index
             box["error"] = exc
 
     thread = threading.Thread(target=work, name="quipu-hook-reflect", daemon=True)
     thread.start()
     thread.join(timeout)
     if thread.is_alive():
-        raise HookError(f"reflection timed out after {timeout:g}s (endpoint {cfg.llm_base_url}, "
-                        f"{len(chunks)} chunk{'s' if len(chunks) != 1 else ''})")
+        stop.set()  # the in-flight chunk is discarded rather than applied after we have reported
+        raise HookError(
+            f"reflection timed out after {timeout:g}s (endpoint {cfg.llm_base_url}, "
+            f"{len(chunks)} chunk{'s' if len(chunks) != 1 else ''}; "
+            f"{progress['applied']} chunk(s) already applied, {len(progress['written'])} entries written)")
     if "error" in box:
         exc = box["error"]
-        raise HookError(f"reflection failed: {type(exc).__name__}: {exc}") from exc
-    return box.get("proposals") or []
+        where = f" at chunk {(box.get('failed') or 0) + 1} of {len(chunks)}" if len(chunks) > 1 else ""
+        raise HookError(
+            f"reflection failed{where}: {type(exc).__name__}: {exc} "
+            f"({progress['applied']} chunk(s) applied, {len(progress['written'])} entries written)") from exc
 
 
 def run(cfg, transcript: str | Path, provider, agent: str = "", project: str = "",
@@ -120,15 +183,25 @@ def run(cfg, transcript: str | Path, provider, agent: str = "", project: str = "
         return HookResult(prompt=promote_mod.build_prompt(chunks[0] if chunks else text, cfg,
                                                            _existing(cfg)),
                           seconds=time.monotonic() - started)
-    proposals = promote_mod.dedupe_proposals(_reflect_bounded(chunks, cfg, provider, timeout))
-    # nothing is written until the model has answered in full: a transport error above leaves the
-    # vault exactly as it was, which is what "no partial entry" means
+    key = session or hashlib.sha256(text.encode("utf-8")).hexdigest()[:16]
     report: dict = {}
-    written = promote_mod.apply(proposals, cfg, agent=agent, project=project,
-                                session=session, source=str(transcript), report=report)
+    progress = {"written": [], "applied": 0, "resumed": 0}
+
+    def apply_chunk(proposals):  # noqa: ANN001 - one chunk's proposals, already deduped
+        return promote_mod.apply(proposals, cfg, agent=agent, project=project, session=session,
+                                 source=str(transcript), report=report)
+
+    try:
+        _reflect_streaming(chunks, cfg, provider, timeout, apply_chunk, key, progress)
+    except HookError:
+        # whatever landed before the failure is real: index it, then say what happened
+        graph_mod.materialize(cfg)
+        index_mod.reindex(cfg.root, cfg.db_path)
+        raise
     graph_mod.materialize(cfg)
     index_mod.reindex(cfg.root, cfg.db_path)
-    return HookResult(written=written, proposed=len(proposals), chunks=len(chunks),
+    return HookResult(written=progress["written"], proposed=len(progress["written"]),
+                      chunks=len(chunks), resumed=progress["resumed"],
                       seconds=time.monotonic() - started,
                       skipped_edges=report.get("skipped_edges") or [])
 
