@@ -73,6 +73,30 @@ def read_transcript(source: str | Path, stdin=None) -> str:
     return promote_mod.load_transcript(source)
 
 
+def served_model(base_url: str, timeout: float = 3.0) -> str:
+    """Ask the endpoint which model it is actually serving.
+
+    `[llm] model` defaults to the literal string "local", which names no weights: a vault configured
+    that way would record "local" on every entry and the provenance field would be a placeholder. The
+    OpenAI-compatible `/models` route answers with the alias the server loaded (#110), so ask it once
+    per pass; any failure falls back to the configured name rather than blocking the write.
+    """
+    import json as _json
+    import urllib.request
+
+    url = f"{base_url.rstrip('/')}/models"
+    try:
+        with urllib.request.urlopen(url, timeout=timeout) as r:
+            data = _json.loads(r.read()).get("data") or []
+        for item in data:
+            name = str((item or {}).get("id") or "").strip()
+            if name:
+                return name
+    except Exception:  # noqa: BLE001 - a naming lookup must never fail a pass
+        return ""
+    return ""
+
+
 def _existing(cfg) -> list[str]:
     return [e.summary for _p, e in iter_entries(cfg.root) if e.state == "promoted"]
 
@@ -185,7 +209,10 @@ def run(cfg, transcript: str | Path, provider, agent: str = "", project: str = "
                           seconds=time.monotonic() - started)
     # which model answered, recorded on every entry it produces: the endpoint's own name when it
     # reports one, else whatever the vault is configured to call (#110)
-    model_name = str(getattr(provider, "model", "") or cfg.llm_model or "")
+    model_name = str(getattr(provider, "model", "") or "")
+    if not model_name or model_name == "local":
+        # "local" is the config's placeholder, not a model name
+        model_name = served_model(cfg.llm_base_url) or model_name or cfg.llm_model
     key = session or hashlib.sha256(text.encode("utf-8")).hexdigest()[:16]
     report: dict = {}
     progress = {"written": [], "applied": 0, "resumed": 0}

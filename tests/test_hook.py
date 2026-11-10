@@ -262,3 +262,36 @@ def test_the_hook_records_the_model_that_answered(tmp_path):
     hook_mod.run(cfg, _transcript(tmp_path), Named(), agent="glitch", session="s-model")
     (entry,) = _entries(cfg)
     assert entry.model == "qwen3.6-35b-a3b", entry.model
+
+
+def test_a_configured_name_of_local_is_replaced_by_what_the_endpoint_serves(tmp_path, monkeypatch):
+    """#110 follow-up, measured: the vault's `[llm] model` is the literal string "local", so recording
+    `provider.model` would have written "local" on every entry — the placeholder the issue was about."""
+    cfg = load(tmp_path / "vault", create=True)
+    cfg.llm_model = "local"
+
+    class Answers:
+        model = "local"
+
+        def complete(self, prompt: str) -> str:
+            return json.dumps({"entries": [dict(PROPOSAL)]})
+
+    monkeypatch.setattr(hook_mod, "served_model", lambda url, timeout=3.0: "qwen3.6-35b-a3b")
+    hook_mod.run(cfg, _transcript(tmp_path), Answers(), session="s-local")
+    (entry,) = _entries(cfg)
+    assert entry.model == "qwen3.6-35b-a3b", entry.model
+
+
+def test_a_naming_lookup_that_fails_does_not_fail_the_pass(tmp_path, monkeypatch):
+    cfg = load(tmp_path / "vault", create=True)
+
+    class Answers:
+        model = "local"
+
+        def complete(self, prompt: str) -> str:
+            return json.dumps({"entries": [dict(PROPOSAL)]})
+
+    monkeypatch.setattr(hook_mod, "served_model", lambda url, timeout=3.0: "")
+    result = hook_mod.run(cfg, _transcript(tmp_path), Answers(), session="s-fallback")
+    assert result.promoted == 1
+    assert _entries(cfg)[0].model in ("", "local")
