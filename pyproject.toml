@@ -25,6 +25,7 @@ dev = ["pytest>=8", "ruff>=0.5", "build>=1.2"]
 
 [project.scripts]
 quipu = "quipu.cli:main"
+quipu-capture = "quipu.capture:main"
 
 [project.entry-points."hermes_agent.memory_providers"]
 quipu = "quipu:register"

@@ -4,6 +4,20 @@ Notable changes, newest first. Versions follow `0.x` while the format and the CL
 anything that changes a vault's on-disk shape gets an explicit note, because markdown is the source of
 truth and a migration is the user's data.
 
+## Unreleased
+
+### Changed
+
+- **the capture runner is part of the package, not a file in `~/.local/bin`** (#131). `quipu-capture`
+  decides what the vault is made of — which sessions are read, how often a grown one is re-read, whether
+  a cron run counts as memory — and it lived as an untracked 376-line script with timestamped backups
+  and no test. It is now `quipu/capture.py` with a `quipu-capture` entry point, nine tests covering
+  every rule that a measurement put there, and it calls `hook.run` and the audit **in-process** instead
+  of spawning its own CLI. `cli.audit_report()` is the extracted seam: the timer asks the same question
+  the CLI prints.
+- the module also stops repeating a claim that was never true: a re-pass of a completed session is a
+  **full** pass, because the hook deletes its chunk ledger when the pass finishes.
+
 ## 0.7.0 — 2026-11-11
 
 Two surfaces that could tell the truth and didn't, and a prompt that was asking for the wrong evidence.

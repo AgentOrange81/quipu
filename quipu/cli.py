@@ -475,7 +475,17 @@ def _index_fields_lost(cfg, entries) -> int:
 
 def cmd_audit(args) -> int:
     """Cheap health check: unreachable links, missing evidence, dangling supersedes."""
-    cfg = _cfg(args)
+    report = audit_report(_cfg(args))
+    print(json.dumps(report, indent=2))
+    return 0 if not report["problems"] else 1
+
+
+def audit_report(cfg) -> dict:
+    """The audit's findings as a dict, so callers other than the CLI can act on them.
+
+    `quipu-capture` asks this on every timer tick and reindexes when the answer says the derived copy
+    lost fields (#128) — the same question the CLI prints, without spawning the CLI to print it.
+    """
     entries = {e.id: e for _p, e in iter_entries(cfg.root)}
     problems = []
     # A stale writer is invisible until someone reads the column it dropped. Measured: a process
@@ -547,10 +557,8 @@ def cmd_audit(args) -> int:
         spec = format_edge_spec(r["src"], r["predicate"], r["dst"])
         if not any(graph_mod.entry_records_edge(e, spec) for e in candidates):
             unrecorded.append({"edge": r["id"], "spec": spec, "note_id": r["note_id"]})
-    print(json.dumps({"entries": len(entries), "problems": problems,
-                      "schema_version": version,
-                      "edges_not_in_markdown": unrecorded}, indent=2))
-    return 0 if not problems else 1
+    return {"entries": len(entries), "problems": problems,
+            "schema_version": version, "edges_not_in_markdown": unrecorded}
 
 
 def cmd_ask_backfill(args) -> int:
