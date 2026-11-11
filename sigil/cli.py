@@ -11,6 +11,7 @@ from . import askfill as askfill_mod
 from . import brief as brief_mod
 from . import config as config_mod
 from . import embed as embed_mod
+from . import evidence as evidence_mod
 from . import export as export_mod
 from . import graph as graph_mod
 from . import hook as hook_mod
@@ -131,6 +132,10 @@ def cmd_write(args) -> int:
     e = Entry(kind=args.kind, state=args.state, agent=args.agent, project=args.project,
               session=args.session, summary=args.summary, evidence=args.evidence or "",
               ask=args.ask or "", importance=args.importance, body=body, source="cli",
+              # classified here for the same reason the MCP writer does it (#128): the field is
+              # derived from the evidence text, and a writer that leaves it out does not fail —
+              # it silently produces an unclassified note that only the backfill script can fix
+              evidence_kind=evidence_mod.classify(args.evidence or ""),
               supersedes=list(args.supersedes or []), edges=order)
     # The entry is written BEFORE the edges are asserted (docs/USING.md): a bad predicate must
     # not cost the memory. The write then fails and the entry is left on disk but unindexed;

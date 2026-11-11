@@ -151,3 +151,28 @@ def test_the_audit_sees_an_index_that_lost_what_the_markdown_kept(tmp_path):
 
     (problem,) = [p for p in audit_problems() if "index lost" in p]
     assert "2 entries" in problem, problem
+
+
+def test_the_cli_writer_records_the_class_too(tmp_path, monkeypatch):
+    """#128 fixed the MCP writer; the CLI writer kept producing unclassified notes for the same reason —
+    omitting a derived field is not an error, so nothing complains and only a backfill heals it.
+
+    The field must equal what `classify` says, not what the evidence feels like: the vocabulary is
+    command / path / url / claim, and there is no "measurement" class to expect (#109).
+    """
+    vault = tmp_path / "v"
+    monkeypatch.setattr("sys.argv", ["sigil", "--vault", str(vault), "init"])
+    cli.main()
+    evidence = "see `sigil --vault ~/sigil-vault audit` for the counts"
+    monkeypatch.setattr("sys.argv", ["sigil", "--vault", str(vault), "write",
+                                     "--summary", "the vault audit is the surface that proves a repair",
+                                     "--evidence", evidence,
+                                     "--agent", "glitch"])
+    cli.main()
+
+    cfg = load(vault)
+    note = next(iter((cfg.root / "notes").glob("*.md")))
+    front = note.read_text(encoding="utf-8").split("---")[1]
+
+    assert f"evidence_kind: {evidence_mod.classify(evidence)}" in front, front
+    assert "evidence_kind: command" in front, front
