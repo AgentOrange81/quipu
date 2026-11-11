@@ -4,7 +4,7 @@ Notable changes, newest first. Versions follow `0.x` while the format and the CL
 anything that changes a vault's on-disk shape gets an explicit note, because markdown is the source of
 truth and a migration is the user's data.
 
-## Unreleased
+## 0.8.0 — 2026-11-11
 
 ### Changed
 
