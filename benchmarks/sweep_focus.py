@@ -9,7 +9,7 @@ Two candidate causes, measured separately because they get conflated:
   focus       bm25 rewards coverage, not concentration: hits spread through a huge body score like hits
               in a summary, so the ranking has no notion of "this entry is about that".
 
-Every variant rides on the SHIPPED `quipu.index.search` — the stopword variant rewrites the query text
+Every variant rides on the SHIPPED `sigil.index.search` — the stopword variant rewrites the query text
 (the module tokenises it the same way), the focus variant re-scores the shipped ranking's own candidate
 window. Nothing here reimplements retrieval, so "shipped" in the table is the code an agent runs.
 
@@ -23,7 +23,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from quipu import index as index_mod  # noqa: E402
+from sigil import index as index_mod  # noqa: E402
 
 #: English function words plus the interrogatives a question-shaped query carries. A closed list on
 #: purpose: a data-driven stoplist is a second corpus to maintain, and this one is auditable.

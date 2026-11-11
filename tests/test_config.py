@@ -1,7 +1,7 @@
 """Config parsing, including the Python 3.10 path where tomllib does not exist."""
 import pytest
 
-from quipu import config as config_mod
+from sigil import config as config_mod
 
 
 def test_roundtrip_through_save_and_load(cfg, tmp_path):

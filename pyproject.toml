@@ -3,7 +3,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "quipu"
+name = "sigil-memory"
 version = "0.8.0"
 description = "Local-first agent memory: verbatim capture, a temporal knowledge graph, and lifecycle-labeled training data."
 readme = "README.md"
@@ -24,14 +24,18 @@ dependencies = []
 dev = ["pytest>=8", "ruff>=0.5", "build>=1.2"]
 
 [project.scripts]
-quipu = "quipu.cli:main"
-quipu-capture = "quipu.capture:main"
+sigil = "sigil.cli:main"
+sigil-capture = "sigil.capture:main"
+# one release of grace: anything still calling the old names keeps working
+quipu = "sigil.cli:main"
+quipu-capture = "sigil.capture:main"
 
 [project.entry-points."hermes_agent.memory_providers"]
-quipu = "quipu:register"
+sigil = "sigil:register"
+quipu = "sigil:register"
 
 [tool.hatch.build.targets.wheel]
-packages = ["quipu"]
+packages = ["sigil", "quipu"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

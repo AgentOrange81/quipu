@@ -5,7 +5,7 @@ file parsed exactly as before. The cross-parser comparison half needs tomllib (3
 """
 import pytest
 
-from quipu import config as config_mod
+from sigil import config as config_mod
 
 try:  # Python 3.11+
     import tomllib

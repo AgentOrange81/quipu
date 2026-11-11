@@ -1,8 +1,8 @@
 """Run a retrieval benchmark and write the result file.
 
 The retrieval path is the shipped one, end to end: notes are written as markdown through
-`quipu.store.write_entry`, indexed by `quipu.index.reindex` (SQLite FTS5), and queried with
-`quipu.index.search` (bm25). Nothing is re-implemented here, so the number is the number the
+`sigil.store.write_entry`, indexed by `sigil.index.reindex` (SQLite FTS5), and queried with
+`sigil.index.search` (bm25). Nothing is re-implemented here, so the number is the number the
 product would give an agent.
 
     python -m benchmarks.run --dataset synthetic --k 5 --k 10 --json out.json
@@ -21,8 +21,8 @@ from collections import defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
 
-from quipu.index import reindex, search
-from quipu.store import write_entry
+from sigil.index import reindex, search
+from sigil.store import write_entry
 
 from .loaders import (
     BenchQuery,
@@ -34,7 +34,7 @@ from .loaders import (
 )
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-RETRIEVER = "quipu.index.search (sqlite FTS5, bm25, unicode61+porter)"
+RETRIEVER = "sigil.index.search (sqlite FTS5, bm25, unicode61+porter)"
 
 
 def _git(*args: str) -> str:

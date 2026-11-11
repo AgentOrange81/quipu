@@ -1,6 +1,6 @@
 import pytest
 
-from quipu import graph as graph_mod
+from sigil import graph as graph_mod
 
 
 def test_edge_requires_known_predicate(cfg):
@@ -101,7 +101,7 @@ def test_version_qualifier_is_a_different_entity(cfg):
 
 
 def test_aliases_are_recorded_for_every_spelling(cfg):
-    from quipu.index import connect
+    from sigil.index import connect
     graph_mod.add_edge(cfg, "Next.js", "depends_on", "react")
     graph_mod.add_edge(cfg, "NEXTJS", "used_by", "vercel")
     c = connect(cfg.db_path)
@@ -114,5 +114,5 @@ def test_aliases_are_recorded_for_every_spelling(cfg):
 def test_materialize_writes_entity_hubs(cfg):
     graph_mod.add_edge(cfg, "quipu", "depends_on", "sqlite")
     assert graph_mod.materialize(cfg) == 2
-    hub = (cfg.entities_dir / "quipu.md").read_text()
+    hub = (cfg.entities_dir / "quipu.md").read_text()  # an entity called quipu, not the package
     assert "-->" in hub and "[[sqlite]]" in hub

@@ -1,6 +1,6 @@
 """The promotion gate behind the write tool (#79).
 
-`quipu_write` used to go through `quipu.mcp._write` with no `state` and no `importance`, so an entry an
+`quipu_write` used to go through `sigil.mcp._write` with no `state` and no `importance`, so an entry an
 agent wrote was always `raw` — present and searchable, but never promotable and never exported as
 training data. The fix has to expose both fields *without* handing the model a way to mint `promoted`
 entries, so the same gate the importer and `quipu promote` use decides: evidence **and** importance at
@@ -12,16 +12,16 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-import quipu.config
-import quipu.index
-from quipu.hermes_provider import QuipuMemoryProvider
+import sigil.config
+import sigil.index
+from sigil.hermes_provider import QuipuMemoryProvider
 
 SUMMARY = "The release wheel refused to install until the filename kept all five parts"
 
 
 def _provider(tmp_path: Path, monkeypatch) -> tuple[QuipuMemoryProvider, Path]:
     vault = tmp_path / "vault"
-    quipu.config.load(vault, create=True)
+    sigil.config.load(vault, create=True)
     monkeypatch.setenv("QUIPU_VAULT", str(vault))
     provider = QuipuMemoryProvider()
     provider.initialize("gate-test", hermes_home=str(tmp_path / ".hermes"), platform="cli")

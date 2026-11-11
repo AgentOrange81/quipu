@@ -1,18 +1,18 @@
-"""Black-box contract tests for quipu.hermes_provider (quipu issue #10).
+"""Black-box contract tests for sigil.hermes_provider (quipu issue #10).
 
 These tests certify QuipuMemoryProvider against the Hermes MemoryProvider ABC
 (issue #10). The tests are the certification, not a description of the code:
 they are written before the implementation exists and are expected to fail
 with ImportError/ModuleNotFoundError until cipher's branch lands.
 
-Imports stay on the public surface of ``quipu.hermes_provider``; vault
-fixtures are built in tmp_path with the house idiom (quipu.config.load(...,
+Imports stay on the public surface of ``sigil.hermes_provider``; vault
+fixtures are built in tmp_path with the house idiom (sigil.config.load(...,
 create=True), the ``import fabric`` CLI entry point and iter_entries — the
 idiom used by tests/test_import_report.py).
 
 Hermetic by construction: no network, nothing touched under ~/quipu-vault,
 no test sleep longer than 50 ms (the queue_prefetch test fakes the *cost* of
-a search at the quipu.index.search seam instead of sleeping on the happy
+a search at the sigil.index.search seam instead of sleeping on the happy
 path; its own sleeps are 10 ms polls).
 
 Vault resolution is certified after ``initialize(session_id, hermes_home=...)``
@@ -31,11 +31,11 @@ import urllib.request
 from pathlib import Path
 from typing import NamedTuple
 
-import quipu.config
-import quipu.index
-from quipu.cli import main
-from quipu.hermes_provider import QuipuMemoryProvider, register
-from quipu.store import iter_entries
+import sigil.config
+import sigil.index
+from sigil.cli import main
+from sigil.hermes_provider import QuipuMemoryProvider, register
+from sigil.store import iter_entries
 
 # ---------------------------------------------------------------------------
 # fixture corpus — distinctive token sets, one per entry, no cross-matching
@@ -131,7 +131,7 @@ def _entry_md(entry: _Entry) -> str:
 
 def build_vault(path: Path, entries: list[_Entry]) -> Path:
     """Create a real vault at *path* (under tmp_path) holding *entries*."""
-    quipu.config.load(path, create=True)
+    sigil.config.load(path, create=True)
     src = path.parent / (path.name + ".src")
     src.mkdir(parents=True, exist_ok=True)
     for i, entry in enumerate(entries):
@@ -311,7 +311,7 @@ def test_queue_prefetch_nonblocking_and_cached(tmp_path, monkeypatch):
 
         return wrapper
 
-    monkeypatch.setattr(quipu.index, "search", _slow(quipu.index.search))
+    monkeypatch.setattr(sigil.index, "search", _slow(sigil.index.search))
 
     # instrument check: an uncached search really is slowed down
     t_cold = time.perf_counter()

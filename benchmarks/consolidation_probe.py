@@ -23,9 +23,9 @@ import sys
 from collections import Counter, defaultdict
 from pathlib import Path
 
-from quipu import embed as embed_mod
-from quipu import index as index_mod
-from quipu.store import iter_entries
+from sigil import embed as embed_mod
+from sigil import index as index_mod
+from sigil.store import iter_entries
 
 STOP = set("the a an of to in on for and or is are was were it its this that with as at by from "
            "not do does did we our you your".split())

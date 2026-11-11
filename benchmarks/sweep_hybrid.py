@@ -24,9 +24,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import benchmarks.run as bench  # noqa: E402
 from benchmarks.loaders import load_synthetic  # noqa: E402
-from quipu.embed import RRF_K, RRF_VECTOR_WEIGHT  # noqa: E402
-from quipu.index import reindex, search  # noqa: E402
-from quipu.store import write_entry  # noqa: E402
+from sigil.embed import RRF_K, RRF_VECTOR_WEIGHT  # noqa: E402
+from sigil.index import reindex, search  # noqa: E402
+from sigil.store import write_entry  # noqa: E402
 
 
 def embed(url: str, model: str, texts: list[str]) -> list[list[float]]:

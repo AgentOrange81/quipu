@@ -13,12 +13,12 @@ import json
 
 import pytest
 
-from quipu import brief as brief_mod
-from quipu import config as config_mod
-from quipu import store as store_mod
-from quipu.cli import main
-from quipu.mcp import handle
-from quipu.store import Entry, iter_entries, write_entry
+from sigil import brief as brief_mod
+from sigil import config as config_mod
+from sigil import store as store_mod
+from sigil.cli import main
+from sigil.mcp import handle
+from sigil.store import Entry, iter_entries, write_entry
 
 
 @pytest.fixture()

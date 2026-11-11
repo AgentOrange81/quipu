@@ -18,7 +18,7 @@ from benchmarks.loaders import (
     query_set_sha256,
 )
 from benchmarks.run import run
-from quipu.store import Entry
+from sigil.store import Entry
 
 
 def test_synthetic_corpus_is_deterministic():

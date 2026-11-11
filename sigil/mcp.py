@@ -215,7 +215,7 @@ def handle(cfg, msg: dict) -> dict | None:
         return _result(msg_id, {
             "protocolVersion": PROTOCOL_VERSION,
             "capabilities": {"tools": {"listChanged": False}},
-            "serverInfo": {"name": "quipu", "version": __version__},
+            "serverInfo": {"name": "sigil", "version": __version__},
         })
     if method in ("notifications/initialized", "initialized"):
         return None

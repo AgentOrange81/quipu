@@ -14,10 +14,10 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-import quipu.config
-import quipu.index
-from quipu import graph as graph_mod
-from quipu.cli import main
+import sigil.config
+import sigil.index
+from sigil import graph as graph_mod
+from sigil.cli import main
 
 SHITTER = "Shitter's docker build was fixed by pinning the builder stage to node 22"
 GOONIFY = "goonify.fun routes mail through Cloudflare Email Routing, not a mailbox provider"
@@ -26,7 +26,7 @@ QUIPU = "quipu 0.4.0 shipped the Hermes memory provider"
 
 def _seed(tmp_path: Path) -> Path:
     vault = tmp_path / "vault"
-    quipu.config.load(vault, create=True)
+    sigil.config.load(vault, create=True)
     for summary, project in ((SHITTER, "shitter"), (GOONIFY, "goonify"), (QUIPU, "quipu"),
                              ("An unlabelled observation about something", "unknown")):
         main(["--vault", str(vault), "write", "--summary", summary, "--state", "promoted",
@@ -40,7 +40,7 @@ def _files(vault: Path) -> dict[str, str]:
 
 def test_the_hub_lists_the_entries_tagged_with_that_project(tmp_path):
     vault = _seed(tmp_path)
-    cfg = quipu.config.load(vault)
+    cfg = sigil.config.load(vault)
     rows = graph_mod.project_entries(cfg, "shitter")
     assert [r["summary"] for r in rows] == [SHITTER]
 
@@ -48,20 +48,20 @@ def test_the_hub_lists_the_entries_tagged_with_that_project(tmp_path):
 def test_the_hub_is_identity_matched(tmp_path):
     """`Shitter` and `shitter` are one project — the same identity rule the graph uses for entities."""
     vault = _seed(tmp_path)
-    cfg = quipu.config.load(vault)
+    cfg = sigil.config.load(vault)
     assert graph_mod.project_entries(cfg, "Shitter") == graph_mod.project_entries(cfg, "shitter")
 
 
 def test_unknown_is_not_a_hub(tmp_path):
     """425 entries on the live vault carry `unknown`; a hub for it would be a bucket, not a claim."""
     vault = _seed(tmp_path)
-    cfg = quipu.config.load(vault)
+    cfg = sigil.config.load(vault)
     assert graph_mod.project_entries(cfg, "unknown") == []
 
 
 def test_neighbours_carries_the_hub_and_still_answers_for_a_non_project(tmp_path):
     vault = _seed(tmp_path)
-    cfg = quipu.config.load(vault)
+    cfg = sigil.config.load(vault)
     graph_mod.add_edge(cfg, "quipu-vault", "part_of", "quipu")
     out = graph_mod.neighbors(cfg, "quipu")
     assert out["edges"], "the asserted edge is still there"
@@ -72,14 +72,14 @@ def test_neighbours_carries_the_hub_and_still_answers_for_a_non_project(tmp_path
 def test_the_hub_writes_nothing(tmp_path):
     """The whole point of a view: no edge rows, no markdown churn, nothing for rebuild to fold."""
     vault = _seed(tmp_path)
-    cfg = quipu.config.load(vault)
+    cfg = sigil.config.load(vault)
     before_text = _files(vault)
-    c = quipu.index.connect(cfg.db_path)
+    c = sigil.index.connect(cfg.db_path)
     edges_before = c.execute("select count(*) from edges").fetchone()[0]
     c.close()
     graph_mod.project_entries(cfg, "shitter")
     graph_mod.neighbors(cfg, "shitter")
-    c = quipu.index.connect(cfg.db_path)
+    c = sigil.index.connect(cfg.db_path)
     edges_after = c.execute("select count(*) from edges").fetchone()[0]
     c.close()
     assert edges_after == edges_before == 0
@@ -90,7 +90,7 @@ def test_pruned_entries_are_left_out_of_the_hub(tmp_path):
     """Pruning is the vault deciding something is not knowledge; a browse surface must not lead with
     rejected material, and on the live vault the pruned shitter entries are transcript-summary junk."""
     vault = _seed(tmp_path)
-    cfg = quipu.config.load(vault)
+    cfg = sigil.config.load(vault)
     pruned = [r for r in graph_mod.project_entries(cfg, "shitter")]
     assert pruned, "the seeded entry is there before pruning"
     path = next((vault / "notes").glob("*.md")).parent
@@ -121,7 +121,7 @@ def test_cli_timeline_answers_for_a_project_tag(tmp_path, capsys):
 
 def test_stats_reports_connectivity_and_hubs(tmp_path, capsys):
     vault = _seed(tmp_path)
-    cfg = quipu.config.load(vault)
+    cfg = sigil.config.load(vault)
     graph_mod.add_edge(cfg, "quipu-vault", "part_of", "quipu")
     capsys.readouterr()
     assert main(["--vault", str(vault), "stats"]) == 0

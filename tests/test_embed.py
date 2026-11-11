@@ -16,10 +16,10 @@ What is pinned:
 
 import pytest
 
-from quipu import config as config_mod
-from quipu import embed as embed_mod
-from quipu import index as index_mod
-from quipu.store import Entry, write_entry
+from sigil import config as config_mod
+from sigil import embed as embed_mod
+from sigil import index as index_mod
+from sigil.store import Entry, write_entry
 
 
 def fake_transport(texts):
@@ -56,7 +56,7 @@ def embed_vault(cfg, model="fake"):
     c = index_mod.connect(cfg.db_path)
     try:
         vectors = {}
-        for _p, e in __import__("quipu.store", fromlist=["iter_entries"]).iter_entries(cfg.root):
+        for _p, e in __import__("sigil.store", fromlist=["iter_entries"]).iter_entries(cfg.root):
             text = embed_mod.entry_text(e.summary, e.ask, e.body)
             vectors[e.id] = (embed_mod.text_digest(text), fake_transport([text])[0])
         return embed_mod.store(c, model, vectors)

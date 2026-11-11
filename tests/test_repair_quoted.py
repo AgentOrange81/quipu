@@ -10,9 +10,9 @@ import textwrap
 
 import pytest
 
-from quipu import repair as repair_mod
-from quipu.cli import main
-from quipu.store import iter_entries
+from sigil import repair as repair_mod
+from sigil.cli import main
+from sigil.store import iter_entries
 
 TRUNCATED = "'Corrected metadata for the PRL fleet (agent: hermes, project_id:"
 FULL = "Corrected metadata for the PRL fleet (agent: hermes, project_id: prl-mining)"

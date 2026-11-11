@@ -9,13 +9,13 @@ import json
 
 import pytest
 
-from quipu import cli
-from quipu import evidence as evidence_mod
-from quipu import export as export_mod
-from quipu import index as index_mod
-from quipu import promote as promote_mod
-from quipu.config import load
-from quipu.store import Entry, iter_entries, write_entry
+from sigil import cli
+from sigil import evidence as evidence_mod
+from sigil import export as export_mod
+from sigil import index as index_mod
+from sigil import promote as promote_mod
+from sigil.config import load
+from sigil.store import Entry, iter_entries, write_entry
 
 
 @pytest.mark.parametrize("text, kind", [
@@ -104,7 +104,7 @@ def test_the_reflection_prompt_asks_for_a_pointer_not_a_restatement():
     Measured on one fixed 89 KB transcript, same model and chunking, before and after: claim 63% → 50%,
     median evidence 74 B → 110 B, entries 35 → 36, and the pass took 629 s → 318 s.
     """
-    from quipu.promote import PROMPT_PATH
+    from sigil.promote import PROMPT_PATH
 
     prompt = PROMPT_PATH.read_text(encoding="utf-8")
     flat = " ".join(prompt.split())  # the rules are prose: line wrapping is not part of them

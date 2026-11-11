@@ -1,4 +1,6 @@
-from .cli import main
+"""`python -m quipu` still runs the CLI, because a module path is the other thing people hardcode."""
+import sys
 
-if __name__ == "__main__":
-    raise SystemExit(main())
+from sigil.cli import main
+
+sys.exit(main())

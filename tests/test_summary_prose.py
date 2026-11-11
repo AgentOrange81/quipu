@@ -7,7 +7,7 @@ boundary now refuses the shape; the importer derives a statement from the body i
 historical corpus should not lose a memory to tidy a field; and `audit` reports anything that got in
 before the rule existed.
 
-Everything here goes through the public surfaces (`quipu.cli.main`, `promote.record_capture`, the
+Everything here goes through the public surfaces (`sigil.cli.main`, `promote.record_capture`, the
 importer) rather than the helpers, so the tests fail if a caller stops applying the rule.
 """
 
@@ -17,12 +17,12 @@ import io
 import json
 from pathlib import Path
 
-import quipu.config
-import quipu.index
-from quipu import promote
-from quipu.cli import main
-from quipu.importers.fabric import import_fabric
-from quipu.store import iter_entries, looks_like_blob
+import sigil.config
+import sigil.index
+from sigil import promote
+from sigil.cli import main
+from sigil.importers.fabric import import_fabric
+from sigil.store import iter_entries, looks_like_blob
 
 BLOB = '{"corrections_verified": [ {"correction": "(a) start() adds NO listeners"}]}'
 PROSE = "The release wheel refused to install until the filename kept all five parts"
@@ -34,7 +34,7 @@ def _entries(vault: Path) -> list:
 
 
 def _vault(tmp_path: Path) -> Path:
-    quipu.config.load(tmp_path / "vault", create=True)
+    sigil.config.load(tmp_path / "vault", create=True)
     return tmp_path / "vault"
 
 
@@ -66,14 +66,14 @@ def test_write_accepts_the_same_payload_with_the_opt_out(tmp_path):
 
 def test_capture_takes_the_first_prose_line_not_the_first_line(tmp_path):
     vault = _vault(tmp_path)
-    entry = promote.record_capture(quipu.config.load(vault), BLOB + "\n" + PROSE)
+    entry = promote.record_capture(sigil.config.load(vault), BLOB + "\n" + PROSE)
     assert entry.summary == PROSE, entry.summary
     assert BLOB in entry.body, "the blob is evidence; it belongs in the body, not the handle"
 
 
 def test_capture_refuses_a_body_with_no_prose_at_all(tmp_path):
     vault = _vault(tmp_path)
-    cfg = quipu.config.load(vault)
+    cfg = sigil.config.load(vault)
     try:
         promote.record_capture(cfg, BLOB)
     except ValueError as exc:

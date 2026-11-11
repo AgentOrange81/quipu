@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-import quipu
+import sigil
 
 ROOT = Path(__file__).resolve().parent.parent
 PYPROJECT = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
@@ -23,7 +23,7 @@ def _pyproject_version() -> str:
 
 
 def test_the_package_and_the_metadata_agree_on_the_version():
-    assert quipu.__version__ == _pyproject_version(), (
+    assert sigil.__version__ == _pyproject_version(), (
         "quipu/__init__.py and pyproject.toml disagree; `quipu --version` and the MCP "
         "serverInfo.version would both be wrong"
     )

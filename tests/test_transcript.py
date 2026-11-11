@@ -1,7 +1,7 @@
 """Acceptance gate for the transcript loader and chunker (cipher's transcript-chunking branch).
 
-Black-box contract tests, written against the CONTRACT — `quipu.promote.load_transcript`,
-`quipu.promote.chunk_transcript`, and `quipu reflect --max-chars N` — never against an
+Black-box contract tests, written against the CONTRACT — `sigil.promote.load_transcript`,
+`sigil.promote.chunk_transcript`, and `quipu reflect --max-chars N` — never against an
 implementation. On main (a6f305c) none of it exists yet: these tests fail there on purpose, and
 they are the gate cipher's PR must satisfy.
 
@@ -20,9 +20,9 @@ import json
 
 import pytest
 
-from quipu import config as config_mod
-from quipu import promote
-from quipu.cli import main as cli_main
+from sigil import config as config_mod
+from sigil import promote
+from sigil.cli import main as cli_main
 
 DEAD_ENDPOINT = "http://127.0.0.1:9/v1"  # port 9 refuses instantly; nothing can hang on it
 

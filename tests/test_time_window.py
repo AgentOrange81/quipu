@@ -13,11 +13,11 @@ import json
 
 import pytest
 
-from quipu import config as config_mod
-from quipu import index as index_mod
-from quipu.cli import main
-from quipu.mcp import handle
-from quipu.store import Entry, write_entry
+from sigil import config as config_mod
+from sigil import index as index_mod
+from sigil.cli import main
+from sigil.mcp import handle
+from sigil.store import Entry, write_entry
 
 
 @pytest.fixture()
