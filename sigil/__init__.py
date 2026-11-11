@@ -1,4 +1,4 @@
-"""quipu — local-first agent memory.
+"""sigil — local-first agent memory.
 
 Verbatim capture, a temporal knowledge graph, and lifecycle-labeled training data.
 The vault is plain markdown (Obsidian-compatible); the index and graph live in SQLite.
@@ -14,6 +14,13 @@ DEFAULT_PREDICATES = (
     "measured_as", "located_in", "used_by", "blocks", "owned_by", "part_of",
     "contradicts", "learned_from",
 )
+
+
+# Hermes loads a memory provider as a DIRECTORY before it consults `hermes_agent.memory_providers`
+# entry points, so the package itself is installable as the plugin dir (`.hermes/plugins/sigil ->
+# this directory`). Directory loading calls `register(ctx)` here, or instantiates a top-level
+# `MemoryProvider` subclass — so the class has to be exportable from the package root.
+from .hermes_provider import QuipuMemoryProvider  # noqa: E402,F401
 
 
 def register(ctx):
