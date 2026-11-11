@@ -6,6 +6,17 @@ truth and a migration is the user's data.
 
 ## Unreleased
 
+### Fixed
+
+- **the MCP write path records what its evidence is** (#128). `quipu/mcp.py` built its `Entry` without
+  `evidence_kind`, so 565 of 2064 live notes carried no classification at all — every note written
+  through the memory tool rather than the reflection pass. `--evidence-kind` filters were quietly
+  excluding them. The handler now classifies exactly as `promote.apply` does.
+- **the audit sees an index that lost what the markdown kept** (#128). A client holding pre-#109 code
+  rebuilt the live index and blanked `evidence_kind` and `model` on all 2064 rows while the markdown
+  still had both; nothing noticed, because the audit and the exports both stand on the markdown.
+  `quipu audit` now compares the two and reports the disagreement, which is the only surface that can.
+
 ### Changed
 
 - **the reflection prompt asks for a pointer, not a restatement** (#109). The rule read "a number, a

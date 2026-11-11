@@ -19,6 +19,7 @@ from typing import Any
 
 from . import __version__
 from . import config as config_mod
+from . import evidence as evidence_mod
 from . import export as export_mod
 from . import graph as graph_mod
 from . import index as index_mod
@@ -86,7 +87,11 @@ def _write(cfg, args: dict) -> dict:
               session=str(args.get("session") or ""), summary=summary,
               evidence=str(args.get("evidence") or ""), ask=str(args.get("ask") or ""),
               importance=float(args.get("importance") or 0.0), body=str(args.get("body") or ""),
-              source="mcp", supersedes=[str(s) for s in (args.get("supersedes") or [])], edges=order)
+              source="mcp", supersedes=[str(s) for s in (args.get("supersedes") or [])], edges=order,
+              # the CLI write path and the reflection pass both record WHAT the evidence is (#109);
+              # an MCP caller is a write path like any other, and 565 of 2064 live notes were missing
+              # this field purely because they came through here (#128)
+              evidence_kind=evidence_mod.classify(str(args.get("evidence") or "")))
     path = write_entry(cfg.root, e)
     failed = []
     for src, predicate, dst in parsed:
