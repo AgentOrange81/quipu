@@ -239,7 +239,7 @@ def cmd_import(args) -> int:
     # `--vault` may come before or after the subcommand; the subcommand's copy wins.
     vault = getattr(args, "vault_override", None) or args.vault
     if args.dry_run:
-        cfg = config_mod.load(vault, create=False)
+        cfg = config_mod.load_lenient(vault)
         result = fabric_mod.import_fabric(src, cfg.root, dry_run=True,
                                          include_noise=args.include_noise,
                                          promote_threshold=cfg.promote_threshold,
@@ -968,7 +968,11 @@ def main(argv: list[str] | None = None) -> int:
     except ValueError as exc:  # a flag value the setting cannot use: name the setting, exit 2
         print(str(exc), file=sys.stderr)
         return 2
-    return args.fn(args)
+    try:
+        return args.fn(args)
+    except config_mod.VaultNotFound as exc:  # a wrong --vault: name the path, create nothing (#141)
+        print(str(exc), file=sys.stderr)
+        return 2
 
 
 if __name__ == "__main__":

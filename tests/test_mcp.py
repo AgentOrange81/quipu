@@ -118,7 +118,11 @@ class McpServer:
 
 @pytest.fixture()
 def srv(tmp_path):
-    server = McpServer(tmp_path / "vault")
+    # The server refuses to start against a path that is not a vault (#141), so the fixture makes one
+    # the way a user would: a vault root with its notes directory. Everything else the server derives.
+    vault = tmp_path / "vault"
+    (vault / "notes").mkdir(parents=True)
+    server = McpServer(vault)
     try:
         yield server
     finally:

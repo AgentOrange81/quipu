@@ -121,6 +121,7 @@ def test_the_lock_message_names_the_current_command(tmp_path, monkeypatch, capsy
     monkeypatch.setattr(capture_mod, "STATE_DIR", state)
     monkeypatch.setattr(capture_mod, "LOG", tmp_path / "capture.log")
     monkeypatch.setattr(capture_mod, "VAULT", tmp_path / "vault")
+    (tmp_path / "vault" / "notes").mkdir(parents=True)  # a real vault: a bad path is refused earlier
     monkeypatch.setattr(capture_mod, "PROFILES", tmp_path / "profiles")
     monkeypatch.setattr(capture_mod, "DONE", tmp_path / "done.txt")
     monkeypatch.setattr(capture_mod, "REPASS", tmp_path / "repass.json")

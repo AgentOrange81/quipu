@@ -164,6 +164,12 @@ found (looked for: ...)`, naming the paths it tried, in order. Create the vault 
 **An empty vault.** Not an error: recall returns nothing and the agent has no prior context.
 `sigil stats` reports `entries: 0`.
 
+**A path that is not a vault is refused.** A directory with no `notes/`, `entities/` and no `.sigil/`
+(or `.quipu/`) is not a vault, and `sigil` will neither read from it nor write into it: the command
+exits 2, names the path it tried, and creates nothing (#141). That is deliberate — opening a typo'd
+path used to *create* a vault there and answer `[]`, which reads exactly like "no memory about this".
+`sigil --vault <path> init` is the way to make a new one.
+
 **`QUIPU_VAULT` pointing somewhere else.** The provider takes the first candidate that is a
 directory, and `QUIPU_VAULT` is first — so an exported path silently wins over the profile vault.
 The vault path is in the system block, so it is visible in the agent's own context.

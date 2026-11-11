@@ -316,6 +316,13 @@ def main(argv=None) -> int:
 
     # before anything else: the derived copy must agree with the markdown, or a session pass writes on
     # top of an index that already lost fields (the audit's own check, run on a timer — #128)
+    if not config_mod.looks_like_vault(VAULT):
+        # A timer pointed at a path that is not a vault must not create one and report "nothing to do"
+        # forever (#141). Fail the unit so `systemctl status` says so.
+        why = f"not a vault: {VAULT} — check --vault / SIGIL_VAULT. Nothing was created."
+        log(why)
+        print(why)
+        return 1
     healed = heal_index()
     if healed:
         log(healed)
