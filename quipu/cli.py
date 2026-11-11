@@ -446,11 +446,45 @@ def cmd_stats(args) -> int:
     return 0
 
 
+def _index_fields_lost(cfg, entries) -> int:
+    """How many entries carry a derived field in the markdown that the index row does not.
+
+    Only counts fields the entry actually has, so an old vault (no `model:` anywhere) reads as clean.
+    """
+    import sqlite3
+
+    if not cfg.db_path.exists():
+        return 0
+    want_kind = sum(1 for e in entries.values() if e.evidence_kind)
+    want_model = sum(1 for e in entries.values() if e.model)
+    try:
+        c = sqlite3.connect(f"file:{cfg.db_path}?mode=ro", uri=True)
+        try:
+            have_kind = c.execute(
+                "SELECT count(*) FROM entries WHERE evidence_kind IS NOT NULL AND evidence_kind != ''"
+            ).fetchone()[0]
+            have_model = c.execute(
+                "SELECT count(*) FROM entries WHERE model IS NOT NULL AND model != ''"
+            ).fetchone()[0]
+        finally:
+            c.close()
+    except sqlite3.Error:
+        return 0
+    return max(0, want_kind - have_kind) + max(0, want_model - have_model)
+
+
 def cmd_audit(args) -> int:
     """Cheap health check: unreachable links, missing evidence, dangling supersedes."""
     cfg = _cfg(args)
     entries = {e.id: e for _p, e in iter_entries(cfg.root)}
     problems = []
+    # A stale writer is invisible until someone reads the column it dropped. Measured: a process
+    # holding pre-#109 code rebuilt the live index and blanked evidence_kind and model on all 2064
+    # rows while the markdown kept both (#128). The audit stands on the markdown, so it can see that.
+    lost = _index_fields_lost(cfg, entries)
+    if lost:
+        problems.append(f"{lost} entries: the index lost fields the markdown still has "
+                        f"(a client running older code rebuilt it — rerun `quipu reindex`)")
     for e in entries.values():
         if e.state == "promoted" and not e.evidence:
             problems.append(f"{e.id}: promoted without evidence")

@@ -9,10 +9,13 @@ import json
 
 import pytest
 
+from quipu import cli
 from quipu import evidence as evidence_mod
 from quipu import export as export_mod
+from quipu import index as index_mod
 from quipu import promote as promote_mod
-from quipu.store import Entry, iter_entries
+from quipu.config import load
+from quipu.store import Entry, iter_entries, write_entry
 
 
 @pytest.mark.parametrize("text, kind", [
@@ -110,3 +113,41 @@ def test_the_reflection_prompt_asks_for_a_pointer_not_a_restatement():
     assert "no re-checkable evidence in the session" in flat
     # and the JSON example must not invite a number back in
     assert "number / command / path / log line" not in flat
+
+
+def test_the_audit_sees_an_index_that_lost_what_the_markdown_kept(tmp_path):
+    """#128: a writer running pre-#109 code rebuilt the live index and blanked `evidence_kind` and
+    `model` on all 2064 rows, while the markdown still carried both. Nothing noticed: the audit read
+    the markdown, the exports read the markdown, and only a raw SQL read of the index could tell.
+
+    The audit is the surface that stands on the markdown, so it is the one that can say the derived
+    copy no longer matches it.
+    """
+    import sqlite3
+
+    cfg = load(tmp_path / "vault", create=True)
+    for i, ev in enumerate(["ran `pytest -q`, 546 passed", "see /etc/fstab line 3"]):
+        write_entry(cfg.root, Entry(id=f"beef000{i}", state="promoted", summary=f"finding {i}",
+                                    evidence=ev, evidence_kind=evidence_mod.classify(ev)))
+    index_mod.reindex(cfg.root, cfg.db_path)
+
+    def audit_problems():
+        import contextlib
+        import io
+        import json
+        args = type("A", (), {"vault": str(cfg.root), "json": True})()
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            cli.cmd_audit(args)
+        return json.loads(buf.getvalue())["problems"]
+
+    assert not [p for p in audit_problems() if "index lost" in p], "a clean rebuild must read clean"
+
+    # this is exactly what the stale client did: rebuild with the pre-#109 column list
+    c = sqlite3.connect(cfg.db_path)
+    c.execute("UPDATE entries SET evidence_kind = NULL")
+    c.commit()
+    c.close()
+
+    (problem,) = [p for p in audit_problems() if "index lost" in p]
+    assert "2 entries" in problem, problem
