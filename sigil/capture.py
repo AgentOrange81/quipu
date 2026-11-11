@@ -47,9 +47,9 @@ from . import index as index_mod
 from . import promote as promote_mod
 
 HERMES_PROFILES = Path.home() / ".hermes" / "profiles"
-DEFAULT_VAULT = Path.home() / "quipu-vault"
+DEFAULT_VAULT = Path.home() / "sigil-vault"
 LOG_PATH = Path.home() / "admin" / "logs" / "quipu-capture.log"
-STATE_DIR = Path.home() / ".local" / "state" / "quipu-capture"
+STATE_DIR = Path.home() / ".local" / "state" / "sigil-capture"
 CRON_PREFIX = "[IMPORTANT: You are running as a scheduled cron job"
 
 # Kept as module state rather than arguments so a fixture can point the whole runner at a throwaway
