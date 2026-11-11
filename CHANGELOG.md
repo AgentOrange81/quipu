@@ -4,18 +4,30 @@ Notable changes, newest first. Versions follow `0.x` while the format and the CL
 anything that changes a vault's on-disk shape gets an explicit note, because markdown is the source of
 truth and a migration is the user's data.
 
-## Unreleased
+## 0.7.0 — 2026-11-11
+
+Two surfaces that could tell the truth and didn't, and a prompt that was asking for the wrong evidence.
+
+### On-disk shape
+
+**No change.** The two optional fields 0.6.0 introduced — `model:` and `evidence_kind:` — are simply
+written by one more path now, so a vault may gain them on its next write. Nothing is rewritten on
+upgrade and no migration runs.
 
 ### Fixed
 
 - **the MCP write path records what its evidence is** (#128). `quipu/mcp.py` built its `Entry` without
-  `evidence_kind`, so 565 of 2064 live notes carried no classification at all — every note written
-  through the memory tool rather than the reflection pass. `--evidence-kind` filters were quietly
-  excluding them. The handler now classifies exactly as `promote.apply` does.
+  `evidence_kind`, so notes written through the memory tool were never classified while every
+  reflection-pass note was. Measured on the live vault: 557 notes lacked the field, but 557 of them
+  carried **no evidence at all** (503 raw, 54 pruned) — there was nothing to classify. The real gap was
+  **9 notes**, which the existing `quipu-evidence-backfill.py` closed. The handler now classifies
+  exactly as `promote.apply` does, so the gap cannot reopen.
 - **the audit sees an index that lost what the markdown kept** (#128). A client holding pre-#109 code
   rebuilt the live index and blanked `evidence_kind` and `model` on all 2064 rows while the markdown
   still had both; nothing noticed, because the audit and the exports both stand on the markdown.
-  `quipu audit` now compares the two and reports the disagreement, which is the only surface that can.
+  `quipu audit` now compares the two and reports the disagreement, which is the only surface that can —
+  the check that shipped in 0.6.0 asked whether an edge was recorded, not whether a rebuild had since
+  erased it.
 
 ### Changed
 
