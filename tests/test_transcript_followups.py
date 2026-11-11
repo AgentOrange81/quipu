@@ -8,10 +8,10 @@ import json
 
 import pytest
 
-from quipu import config as config_mod
-from quipu import hook as hook_mod
-from quipu import promote as promote_mod
-from quipu.cli import main as cli_main
+from sigil import config as config_mod
+from sigil import hook as hook_mod
+from sigil import promote as promote_mod
+from sigil.cli import main as cli_main
 
 FAKE = [{"kind": "fact", "summary": "one claim", "evidence": "a log line",
          "importance": 0.9, "ask": "what did the log say?"}]

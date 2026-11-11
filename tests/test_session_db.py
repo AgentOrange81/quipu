@@ -21,7 +21,7 @@ import sys
 
 import pytest
 
-from quipu import promote as promote_mod
+from sigil import promote as promote_mod
 
 SID = "local-0123456789abcdef0123456789abcdef"
 
@@ -106,9 +106,9 @@ def test_the_rendered_transcript_chunks_on_turn_boundaries(tmp_path):
 
 def test_hook_reads_a_live_session_end_to_end(tmp_path):
     """`quipu hook --session-db` must reach the model with the prose, and write what it proposes."""
-    import quipu.hook as hook_mod
-    from quipu.config import load
-    from quipu.store import iter_entries
+    import sigil.hook as hook_mod
+    from sigil.config import load
+    from sigil.store import iter_entries
 
     db = _db(tmp_path, MIXED)
     cfg = load(tmp_path / "vault", create=True)

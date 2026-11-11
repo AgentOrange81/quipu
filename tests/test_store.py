@@ -1,6 +1,6 @@
 import pytest
 
-from quipu.store import Entry, find_entry, iter_entries, read_entry, write_entry
+from sigil.store import Entry, find_entry, iter_entries, read_entry, write_entry
 
 
 def test_roundtrip_preserves_fields_and_unicode(cfg):

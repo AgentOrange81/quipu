@@ -15,7 +15,7 @@ Four columns, because one number was being quoted for two different questions (#
                   "which model is the gateway default". Trend only — never quote it as an accuracy.
   gold_in_5       one of the hand-verified answers is in the top five, even if rank 1 is wrong.
 
-The first row calls the SHIPPED function (`quipu.index.search`). Rows below it re-implement search() to
+The first row calls the SHIPPED function (`sigil.index.search`). Rows below it re-implement search() to
 A/B a candidate shape — and a copy measures itself, so a variant row only means something when the row
 that reproduces the shipped settings agrees with the shipped row. The weights the shipped row uses are
 read from the package, not retyped here; `benchmarks/tests/test_live_queries.py` pins them.
@@ -36,7 +36,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from quipu.index import COLUMN_WEIGHTS, _fts_query, _fts_query_or, connect, search  # noqa: E402
+from sigil.index import COLUMN_WEIGHTS, _fts_query, _fts_query_or, connect, search  # noqa: E402
 
 #: (question, subject stems, hand-verified acceptable answer ids)
 #: The gold ids were verified one at a time against the 2026-10-29 copy of ~/quipu-vault; NOTES below
@@ -186,7 +186,7 @@ def _run_meta():
     from benchmarks.run import _git_info
 
     return {"date": "2026-10-29", "python": platform.python_version(),
-            "retriever": "quipu.index.search (the shipped function) + a local copy for A/B rows",
+            "retriever": "sigil.index.search (the shipped function) + a local copy for A/B rows",
             **_git_info()}
 
 
@@ -208,7 +208,7 @@ def main(argv=None):
         return 2
     db = Path(argv[0]) / ".quipu" / "index.db"
     print(f"corpus: {db}\n")
-    report = evaluate("SHIPPED quipu.index.search", db, shipped_row)
+    report = evaluate("SHIPPED sigil.index.search", db, shipped_row)
     variant_rows = []
     if variants:
         for label, kw in VARIANTS:

@@ -20,8 +20,8 @@ try:  # Python 3.11+
 except ModuleNotFoundError:  # Python 3.10: fall back to the parser load() itself uses
     tomllib = None
 
-from quipu import config as config_mod
-from quipu.cli import _provider, build_parser
+from sigil import config as config_mod
+from sigil.cli import _provider, build_parser
 
 DEAD_ENDPOINT = "http://127.0.0.1:9/v1"  # never contacted: _provider only constructs
 
@@ -54,7 +54,7 @@ def test_a_fresh_vault_takes_the_default_budget(tmp_path):
 
 def test_the_client_default_matches_the_config_default():
     """Two defaults for one number is how a provider call silently keeps the old budget."""
-    from quipu.promote import HttpProvider
+    from sigil.promote import HttpProvider
 
     assert HttpProvider("http://127.0.0.1:9/v1", "m").timeout == config_mod.DEFAULT_LLM_TIMEOUT
 
@@ -63,7 +63,7 @@ def test_a_timeout_names_the_knobs(monkeypatch):
     """The old message named the endpoint and stopped there, so a user had nothing to turn."""
     import urllib.request
 
-    from quipu.promote import HttpProvider
+    from sigil.promote import HttpProvider
 
     def boom(*_a, **_k):
         raise TimeoutError("timed out")
@@ -80,7 +80,7 @@ def test_a_connection_error_is_not_dressed_up_as_a_timeout(monkeypatch):
     import urllib.error
     import urllib.request
 
-    from quipu.promote import HttpProvider
+    from sigil.promote import HttpProvider
 
     def boom(*_a, **_k):
         raise urllib.error.URLError("Connection refused")

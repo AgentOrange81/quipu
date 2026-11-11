@@ -26,11 +26,11 @@ from pathlib import Path
 
 import pytest
 
-from quipu import config as config_mod
-from quipu import graph as graph_mod
-from quipu import index as index_mod
-from quipu import mcp as mcp_mod
-from quipu.store import Entry, write_entry
+from sigil import config as config_mod
+from sigil import graph as graph_mod
+from sigil import index as index_mod
+from sigil import mcp as mcp_mod
+from sigil.store import Entry, write_entry
 
 OLD_SUMMARY = "DOCP 3200 with FCLK 1600 is stable on the TRX40"
 NEW_SUMMARY = "DOCP 3600 is stable again after the BIOS 2601 flash"

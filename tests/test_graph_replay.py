@@ -23,9 +23,9 @@ import subprocess
 import sys
 from pathlib import Path
 
-from quipu import graph as graph_mod
-from quipu import index as index_mod
-from quipu.store import parse_edge_spec, read_entry
+from sigil import graph as graph_mod
+from sigil import index as index_mod
+from sigil.store import parse_edge_spec, read_entry
 
 T1 = "2026-01-01T00:00:00Z"
 

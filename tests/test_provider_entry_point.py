@@ -2,7 +2,7 @@
 
 Hermes resolves a memory provider's *directory* from its entry point without importing it, and only
 a package ``__init__`` yields one — so the entry point must name ``quipu``, not
-``quipu.hermes_provider``. Pointing it at the bare module made a correctly installed provider report
+``sigil.hermes_provider``. Pointing it at the bare module made a correctly installed provider report
 "configured but not installed and not in the plugin catalog", which reads as a bad install and is
 actually a bad entry point.
 
@@ -36,8 +36,12 @@ def _entry_point() -> str:
         )
         assert block, "the provider entry-point table is missing from pyproject.toml"
         group = dict(re.findall(r'^([\w.\-]+)\s*=\s*"([^"]+)"', block.group(1), re.M))
-    assert list(group) == ["quipu"], "the provider is selected by name: memory.provider: quipu"
-    return group["quipu"]
+    # two names for one release: `sigil` is the product, `quipu` keeps an existing
+    # `memory.provider: quipu` config resolving instead of failing at gateway start (#135)
+    values = group if isinstance(group, dict) else {p.name: p for p in group}
+    assert sorted(values) == ["quipu", "sigil"], \
+        "the provider is selected by name: memory.provider: sigil"
+    return values["sigil"]
 
 
 def test_the_entry_point_names_a_package_module():
@@ -53,13 +57,13 @@ def test_the_entry_point_names_a_package_module():
 
 
 def test_the_package_exposes_register():
-    import quipu
+    import sigil
 
-    assert callable(quipu.register)
+    assert callable(sigil.register)
 
 
 def test_register_registers_one_provider():
-    import quipu
+    import sigil
 
     class Ctx:
         def __init__(self) -> None:
@@ -69,6 +73,6 @@ def test_register_registers_one_provider():
             self.providers.append(provider)
 
     ctx = Ctx()
-    quipu.register(ctx)
+    sigil.register(ctx)
     assert len(ctx.providers) == 1
     assert ctx.providers[0].name == "quipu"

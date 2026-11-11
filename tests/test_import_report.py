@@ -16,8 +16,8 @@ Fixtures live in tmp_path; no network, no sleeps.
 """
 import json
 
-from quipu.cli import main
-from quipu.store import iter_entries
+from sigil.cli import main
+from sigil.store import iter_entries
 
 #: the report's exact top-level key set
 REPORT_KEYS = {"source", "vault", "dry_run", "written", "skipped",

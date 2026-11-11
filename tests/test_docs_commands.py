@@ -39,7 +39,7 @@ from pathlib import Path
 
 import pytest
 
-from quipu import config as config_mod
+from sigil import config as config_mod
 
 REPO = Path(__file__).resolve().parent.parent
 DOC_FILES = (REPO / "docs" / "USING.md", REPO / "README.md")

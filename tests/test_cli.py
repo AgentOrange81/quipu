@@ -1,6 +1,6 @@
 import json
 
-from quipu.cli import main
+from sigil.cli import main
 
 
 def run(capsys, *argv):

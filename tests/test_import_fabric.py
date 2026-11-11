@@ -4,9 +4,9 @@ The fixtures live in tmp_path: no real corpus, no committed vault.
 """
 import json
 
-from quipu.cli import main
-from quipu.importers.fabric import import_fabric
-from quipu.store import entry_path, iter_entries
+from sigil.cli import main
+from sigil.importers.fabric import import_fabric
+from sigil.store import entry_path, iter_entries
 
 
 def _fabric_entry(fid, *, type="code-session", training_value="high", summary="a summary",

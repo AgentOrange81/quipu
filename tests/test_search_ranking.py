@@ -16,8 +16,8 @@ term frequency is meaningful — in a three-note vault every score rounds to zer
 you nothing.
 """
 
-from quipu import index as index_mod
-from quipu.store import Entry, write_entry
+from sigil import index as index_mod
+from sigil.store import Entry, write_entry
 
 FILLER = 30
 

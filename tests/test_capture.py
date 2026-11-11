@@ -11,10 +11,10 @@ import time
 
 import pytest
 
-from quipu import capture, evidence
-from quipu import index as index_mod
-from quipu.config import load
-from quipu.store import Entry, write_entry
+from sigil import capture, evidence
+from sigil import index as index_mod
+from sigil.config import load
+from sigil.store import Entry, write_entry
 
 
 def make_profiles(tmp_path, sessions):

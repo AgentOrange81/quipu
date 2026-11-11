@@ -11,9 +11,9 @@ import json
 
 import pytest
 
-from quipu import graph as graph_mod
-from quipu.index import connect
-from quipu.store import Entry, read_entry, write_entry
+from sigil import graph as graph_mod
+from sigil.index import connect
+from sigil.store import Entry, read_entry, write_entry
 
 T1 = "2026-01-01T00:00:00Z"
 T2 = "2026-06-01T00:00:00Z"

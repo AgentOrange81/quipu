@@ -38,7 +38,7 @@ DEADLINE = 5.0
 @functools.cache
 def server_tree_version():
     """The version the tree under test would report: derived from THAT tree, not this pytest one."""
-    out = subprocess.run([SERVER_PY, "-c", "import quipu; print(quipu.__version__)"],
+    out = subprocess.run([SERVER_PY, "-c", "import sigil; print(sigil.__version__)"],
                          capture_output=True, text=True, timeout=30, cwd=str(SERVER_TREE))
     assert out.returncode == 0, f"the server tree's package does not import: {out.stderr!r}"
     return out.stdout.strip()
@@ -183,7 +183,7 @@ def test_initialize_handshake_and_initialized_notification(srv):
     assert "tools" in result.get("capabilities", {}), (
         f"capabilities must advertise tools: {json.dumps(result['capabilities'])}")
     info = result["serverInfo"]
-    assert info["name"] == "quipu", f"serverInfo.name: {info!r}"
+    assert info["name"] == "sigil", f"serverInfo.name: {info!r}"
     assert info["version"] == server_tree_version(), (
         f"serverInfo.version must match the package's __version__: {info!r}")
     # notifications/initialized produces NO response line

@@ -2,9 +2,9 @@ import json
 
 import pytest
 
-from quipu import graph as graph_mod
-from quipu import promote as promote_mod
-from quipu.store import iter_entries
+from sigil import graph as graph_mod
+from sigil import promote as promote_mod
+from sigil.store import iter_entries
 
 GOOD = [{
     "kind": "decision",
@@ -63,7 +63,7 @@ def test_unknown_predicate_is_skipped_not_fatal(cfg):
 
 
 def test_record_capture_is_raw_and_searchable(cfg):
-    from quipu import index as index_mod
+    from sigil import index as index_mod
     e = promote_mod.record_capture(cfg, "raw thought about exporters", agent="glitch")
     assert e.state == "raw" and e.kind == "capture"
     index_mod.reindex(cfg.root, cfg.db_path)
@@ -119,7 +119,7 @@ def test_an_out_of_vocabulary_edge_is_neither_written_nor_asserted(cfg):
     assert len(written) == 1, "a bad edge costs the claim, never the memory"
     assert written[0].edges == ["audit:implements:markdown-check"], written[0].edges
     assert report["skipped_edges"] == ["main:implemented_by:quipu"], report
-    from quipu import graph as graph_mod
+    from sigil import graph as graph_mod
     live = [r["predicate"] for r in graph_mod.timeline(cfg, "audit")]
     assert live == ["implements"]
 
@@ -133,7 +133,7 @@ def test_a_clean_proposal_reports_nothing(cfg):
 def test_a_supersedes_that_names_no_entry_is_dropped_and_reported(cfg):
     """A real pass proposed `supersedes: "Re-measured after engine 0.1.56, …"` — prose in an id field.
     Storing it makes the pair reference nothing and the preference export silently lose it."""
-    from quipu.store import Entry, write_entry
+    from sigil.store import Entry, write_entry
     real = Entry(id="abcd1234", state="promoted", summary="the belief being corrected",
                  evidence="fixture")
     write_entry(cfg.root, real)
@@ -185,7 +185,7 @@ def test_a_refused_edge_never_reaches_the_graph_either(cfg):
     `add_edge(record=True)` wrote the refused spec back into the markdown. Measured live: entry
     cb000190 carried `vector:implements:gpt-oss:120b` (4 parts, unparseable on replay) while the graph
     held the sanitised `gpt-oss-120b` — two shapes of one claim, and audit reporting both."""
-    from quipu import graph as graph_mod
+    from sigil import graph as graph_mod
     proposal = {
         "kind": "decision", "summary": "switched the QA lane to gpt-oss:120b",
         "evidence": "fixture", "importance": 0.9, "ask": "which model runs QA?", "entities": [],
@@ -205,8 +205,8 @@ def test_a_refused_edge_never_reaches_the_graph_either(cfg):
 # --- #110: an entry records the model that wrote it ----------------------------------------------
 
 def test_the_model_that_wrote_an_entry_is_recorded_and_survives_a_round_trip(cfg):
-    from quipu import index as index_mod
-    from quipu.store import Entry
+    from sigil import index as index_mod
+    from sigil.store import Entry
     proposal = {"kind": "fact", "summary": "recorded by a named model", "evidence": "fixture",
                 "importance": 0.9, "ask": "which model wrote this?", "entities": [], "edges": [],
                 "confidence": 0.8}

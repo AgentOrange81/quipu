@@ -31,7 +31,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from quipu.store import Entry
+from sigil.store import Entry
 
 SYNTHETIC_NAME = "synthetic"
 SYNTHETIC_VERSION = "v1"

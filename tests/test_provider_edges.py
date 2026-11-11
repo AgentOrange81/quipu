@@ -12,16 +12,16 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-import quipu.config
-import quipu.index
-from quipu.hermes_provider import QuipuMemoryProvider
+import sigil.config
+import sigil.index
+from sigil.hermes_provider import QuipuMemoryProvider
 
 SUMMARY = "The 6700 XT pair needs HSA_OVERRIDE_GFX_VERSION set or torch sees no device"
 
 
 def _provider(tmp_path: Path, monkeypatch) -> tuple[QuipuMemoryProvider, Path]:
     vault = tmp_path / "vault"
-    quipu.config.load(vault, create=True)
+    sigil.config.load(vault, create=True)
     monkeypatch.setenv("QUIPU_VAULT", str(vault))
     provider = QuipuMemoryProvider()
     provider.initialize("edges-test", hermes_home=str(tmp_path / ".hermes"), platform="cli")
@@ -33,7 +33,7 @@ def _write(provider: QuipuMemoryProvider, **args) -> dict:
 
 
 def _edges(vault: Path) -> list[tuple[str, str, str]]:
-    c = quipu.index.connect(vault / ".quipu" / "index.db")
+    c = sigil.index.connect(vault / ".quipu" / "index.db")
     try:
         return [tuple(r) for r in c.execute(
             "select src, predicate, dst from edges where valid_to is null order by src, dst").fetchall()]

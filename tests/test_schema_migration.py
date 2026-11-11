@@ -2,10 +2,10 @@
 rebuild (#37). Run them with the rest of the suite: `pytest`."""
 import sqlite3
 
-from quipu import graph as graph_mod
-from quipu import index as index_mod
-from quipu.config import load
-from quipu.store import Entry, write_entry
+from sigil import graph as graph_mod
+from sigil import index as index_mod
+from sigil.config import load
+from sigil.store import Entry, write_entry
 
 #: The schema as it was BEFORE the identity key existed: `entities` has no `key` column, and
 #: there is no `user_version` to compare against. This is the db that made every command die.

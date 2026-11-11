@@ -757,7 +757,7 @@ def cmd_mcp(args) -> int:
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="quipu", description="local-first agent memory")
     p.add_argument("--vault", default=".", help="vault root (default: cwd)")
-    p.add_argument("--version", action="version", version=f"quipu {__version__}")
+    p.add_argument("--version", action="version", version=f"sigil {__version__}")
     sub = p.add_subparsers(dest="cmd", required=True)
 
     def add(name: str, text: str, fn) -> argparse.ArgumentParser:

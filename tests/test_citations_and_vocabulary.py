@@ -15,9 +15,9 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-import quipu.config
-from quipu import graph as graph_mod
-from quipu.cli import main
+import sigil.config
+from sigil import graph as graph_mod
+from sigil.cli import main
 
 BASE = "DOCP 3600 threw 649 correctable errors in a single boot on the TRX40"
 LATER = "DOCP 3200 with FCLK 1600 is stable; 3600 stays dropped until the BIOS fixes the divider"
@@ -26,8 +26,8 @@ UNRELATED = "The 6700 XT pair needs HSA_OVERRIDE_GFX_VERSION or torch sees no de
 
 def _seed(tmp_path: Path) -> tuple[Path, str, str, str]:
     vault = tmp_path / "vault"
-    quipu.config.load(vault, create=True)
-    from quipu.store import read_entry
+    sigil.config.load(vault, create=True)
+    from sigil.store import read_entry
     for summary in (BASE, LATER, UNRELATED):
         main(["--vault", str(vault), "write", "--summary", summary, "--state", "promoted",
               "--kind", "decision", "--project", "wraith", "--importance", "0.9",
@@ -43,7 +43,7 @@ def _files(vault: Path) -> dict[str, str]:
 
 def test_citations_find_both_directions(tmp_path):
     vault, base, later, _unrelated = _seed(tmp_path)
-    cfg = quipu.config.load(vault)
+    cfg = sigil.config.load(vault)
     # the correction names the entry it corrects, which is how entries point at each other
     main(["--vault", str(vault), "write", "--summary", LATER, "--state", "promoted",
           "--kind", "decision", "--project", "wraith", "--importance", "0.9",
@@ -55,7 +55,7 @@ def test_citations_find_both_directions(tmp_path):
 
 def test_a_cited_id_in_prose_is_a_citation(tmp_path):
     vault, base, _later, _unrelated = _seed(tmp_path)
-    cfg = quipu.config.load(vault)
+    cfg = sigil.config.load(vault)
     main(["--vault", str(vault), "write", "--summary",
           "The divider findings were confirmed twice, see " + base + " for the boot evidence",
           "--state", "raw", "--kind", "fact", "--project", "wraith"])
@@ -66,7 +66,7 @@ def test_a_cited_id_in_prose_is_a_citation(tmp_path):
 def test_citations_write_nothing(tmp_path):
     """A derived view that drifts is worse than the gap it fills."""
     vault, base, _later, _unrelated = _seed(tmp_path)
-    cfg = quipu.config.load(vault)
+    cfg = sigil.config.load(vault)
     before = _files(vault)
     graph_mod.citations(cfg, base)
     graph_mod.neighbors(cfg, base)
@@ -77,13 +77,13 @@ def test_neighbours_answers_for_an_entry_id(tmp_path, capsys):
     vault, base, _later, _unrelated = _seed(tmp_path)
     capsys.readouterr()
     assert main(["--vault", str(vault), "neighbors", base]) == 0
-    report = graph_mod.neighbors(quipu.config.load(vault), base)
+    report = graph_mod.neighbors(sigil.config.load(vault), base)
     assert report["citations"]["entry"] == base
 
 
 def test_audit_flags_a_predicate_outside_the_vocabulary(tmp_path, capsys):
     vault, _base, _later, _unrelated = _seed(tmp_path)
-    cfg = quipu.config.load(vault)
+    cfg = sigil.config.load(vault)
     graph_mod.add_edge(cfg, "quipu-vault", "part_of", "quipu")
     graph_mod.add_edge(cfg, "quipu-vault", "served_by", "quipu-mcp", allow_new_predicate=True)
     capsys.readouterr()

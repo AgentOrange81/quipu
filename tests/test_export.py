@@ -1,7 +1,7 @@
 import json
 
-from quipu import export as export_mod
-from quipu.store import Entry, write_entry
+from sigil import export as export_mod
+from sigil.store import Entry, write_entry
 
 
 def build(cfg):
@@ -58,7 +58,7 @@ def test_preference_pairs_from_supersedes(cfg):
 
 
 def test_graph_export_files(cfg):
-    from quipu import graph as graph_mod
+    from sigil import graph as graph_mod
     eid = graph_mod.add_edge(cfg, "quipu", "depends_on", "sqlite")
     graph_mod.invalidate(cfg, eid)
     out = cfg.root / "data" / "graph"

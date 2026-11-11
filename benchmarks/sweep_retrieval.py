@@ -16,7 +16,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import benchmarks.run as bench  # noqa: E402
 from benchmarks.loaders import load_synthetic  # noqa: E402
-from quipu.index import _fts_query, _fts_query_or, connect  # noqa: E402
+from sigil.index import _fts_query, _fts_query_or, connect  # noqa: E402
 
 WEIGHT_SETS = {
     "flat": (1.0, 1.0, 1.0, 1.0),

@@ -27,8 +27,8 @@ from pathlib import Path
 
 import pytest
 
-from quipu import config as config_mod
-from quipu import graph as graph_mod
+from sigil import config as config_mod
+from sigil import graph as graph_mod
 
 ASK = "why did the vault lose a live edge on reindex?"
 SUMMARY = "a live edge exists only in the index when its carrier names no entry"
@@ -161,7 +161,7 @@ def test_an_empty_subject_is_refused(vault):
     ("n-gram:measured_as:context-echo", "ngram:measured_as:context-echo"),
 ])
 def test_a_claim_is_recognised_across_spellings(vault, db_form, markdown_form):
-    from quipu.store import Entry, find_entry, read_entry, write_entry
+    from sigil.store import Entry, find_entry, read_entry, write_entry
     root = vault / "vault"
     cfg = config_mod.load(root, create=True)
     entry = Entry(id="beef1234", state="promoted", summary="the claim", evidence="fixture",

@@ -14,11 +14,11 @@ import time
 
 import pytest
 
-from quipu import hook as hook_mod
-from quipu import index as index_mod
-from quipu import promote as promote_mod
-from quipu.config import load
-from quipu.store import iter_entries
+from sigil import hook as hook_mod
+from sigil import index as index_mod
+from sigil import promote as promote_mod
+from sigil.config import load
+from sigil.store import iter_entries
 
 PROPOSAL = {
     "kind": "conclusion",
@@ -145,7 +145,7 @@ def test_a_chunked_pass_writes_one_entry_per_claim_not_one_per_chunk(tmp_path):
 
 
 def test_the_cli_exits_zero_on_a_completed_pass(cfg, capsys, tmp_path):
-    from quipu.cli import main
+    from sigil.cli import main
 
     fake = tmp_path / "fake.json"
     fake.write_text(json.dumps([PROPOSAL]), encoding="utf-8")
@@ -156,7 +156,7 @@ def test_the_cli_exits_zero_on_a_completed_pass(cfg, capsys, tmp_path):
 
 
 def test_the_cli_exits_one_with_a_reason_when_the_pass_fails(cfg, capsys, tmp_path):
-    from quipu.cli import main
+    from sigil.cli import main
 
     broken = tmp_path / "broken.json"
     broken.write_text("{not json", encoding="utf-8")
@@ -169,7 +169,7 @@ def test_the_cli_exits_one_with_a_reason_when_the_pass_fails(cfg, capsys, tmp_pa
 
 
 def test_the_cli_honours_the_dry_run_env_var(cfg, capsys, monkeypatch, tmp_path):
-    from quipu.cli import main
+    from sigil.cli import main
 
     monkeypatch.setenv("QUIPU_HOOK_DRY_RUN", "1")
     fake = tmp_path / "fake.json"

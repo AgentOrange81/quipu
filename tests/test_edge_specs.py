@@ -26,7 +26,7 @@ from pathlib import Path
 
 import pytest
 
-from quipu.store import parse_edge_spec
+from sigil.store import parse_edge_spec
 
 NOTE = """---
 id: 0badf00d
@@ -103,8 +103,8 @@ def test_audit_and_reindex_agree_on_the_count(vault):
 
 
 def test_mcp_write_skips_a_four_part_spec_and_keeps_the_entry(tmp_path):
-    from quipu import config as config_mod
-    from quipu import mcp as mcp_mod
+    from sigil import config as config_mod
+    from sigil import mcp as mcp_mod
 
     cfg = config_mod.load(tmp_path / "vault", create=True)
     result = mcp_mod._write(cfg, {

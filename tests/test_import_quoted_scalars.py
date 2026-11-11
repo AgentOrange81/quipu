@@ -17,8 +17,8 @@ import textwrap
 
 import pytest
 
-from quipu.importers.fabric import _parse_value, _split_frontmatter, import_fabric
-from quipu.store import iter_entries
+from sigil.importers.fabric import _parse_value, _split_frontmatter, import_fabric
+from sigil.store import iter_entries
 
 
 def fm_of(text: str) -> dict:

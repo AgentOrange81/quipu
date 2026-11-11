@@ -24,7 +24,7 @@ try:  # hermes runtime; quipu used standalone falls back so the package imports 
 except Exception:  # pragma: no cover - exercised only outside hermes
 
     class MemoryProvider:  # type: ignore[no-redef]
-        """Fallback base so a standalone ``import quipu.hermes_provider`` never fails."""
+        """Fallback base so a standalone ``import sigil.hermes_provider`` never fails."""
 
     def spawn_context_thread(target, *, name: str, daemon: bool = True) -> threading.Thread:  # type: ignore[no-redef]
         return threading.Thread(target=target, name=name, daemon=daemon)
@@ -55,11 +55,11 @@ def _load_plugin_config() -> dict[str, Any]:
 
 
 def _load_submodule(name: str):
-    """Import ``quipu.<name>``, or None if it does not import (is_available() checks index)."""
+    """Import ``sigil.<name>``, or None if it does not import (is_available() checks index)."""
     try:
         return importlib.import_module(f".{name}", __package__)
     except Exception as exc:
-        logger.debug("quipu.%s failed to import: %s", name, exc)
+        logger.debug("sigil.%s failed to import: %s", name, exc)
         return None
 
 

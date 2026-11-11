@@ -12,8 +12,8 @@ import textwrap
 
 import pytest
 
-from quipu import askfill
-from quipu.cli import main
+from sigil import askfill
+from sigil.cli import main
 
 SUMMARY = "Fabric audit (502 entries): 0% linking, 85% bad summaries, 90% wrong agent"
 GOOD = "What did the 502-entry fabric audit show about linking and wrong agent identities?"

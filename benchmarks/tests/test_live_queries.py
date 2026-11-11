@@ -16,8 +16,8 @@ from __future__ import annotations
 import pytest
 
 from benchmarks import live_queries as lq
-from quipu.index import COLUMN_WEIGHTS, reindex
-from quipu.store import Entry, write_entry
+from sigil.index import COLUMN_WEIGHTS, reindex
+from sigil.store import Entry, write_entry
 
 
 def _hit(eid, summary, state="promoted"):
