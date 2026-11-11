@@ -25,7 +25,7 @@ KINDS = ("command", "path", "url", "claim")
 
 #: first words that make a span a command rather than an identifier
 COMMANDS = frozenset({
-    "git", "gh", "pytest", "python", "python3", "uv", "uvx", "pip", "quipu", "curl", "ps", "pgrep",
+    "git", "gh", "pytest", "python", "python3", "uv", "uvx", "pip", "sigil", "quipu", "curl", "ps", "pgrep",
     "systemctl", "journalctl", "docker", "docker-compose", "nvidia-smi", "ls", "cat", "grep", "rg",
     "sed", "awk", "tar", "sqlite3", "ssh", "scp", "rsync", "mkdir", "rm", "chmod", "sudo", "uvicorn",
     "make", "npm", "node", "cargo", "go", "rustc", "ffmpeg", "ollama", "llama-server", "df", "du",

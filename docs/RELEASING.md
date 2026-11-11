@@ -34,8 +34,8 @@ publication is a body nobody can trust.
 python -m build
 python -m venv /tmp/relcheck && /tmp/relcheck/bin/pip install dist/quipu-0.3.0-py3-none-any.whl
 /tmp/relcheck/bin/quipu --version
-/tmp/relcheck/bin/quipu --vault /tmp/relcheck-vault init
-/tmp/relcheck/bin/quipu mcp --help
+/tmp/relcheck/bin/sigil --vault /tmp/relcheck-vault init
+/tmp/relcheck/bin/sigil mcp --help
 ```
 
 `python -m build` needs the `build` package; it writes `dist/quipu-0.3.0.tar.gz` and

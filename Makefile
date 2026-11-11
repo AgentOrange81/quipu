@@ -14,4 +14,4 @@ demo:
 	bash examples/demo.sh
 
 clean:
-	rm -rf .pytest_cache .ruff_cache **/__pycache__ /tmp/quipu-demo
+	rm -rf .pytest_cache .ruff_cache **/__pycache__ /tmp/sigil-demo

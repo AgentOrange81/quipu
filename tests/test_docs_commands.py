@@ -45,7 +45,7 @@ REPO = Path(__file__).resolve().parent.parent
 DOC_FILES = (REPO / "docs" / "USING.md", REPO / "README.md")
 PLAN = REPO / "PLAN.md"
 
-QUIPU_WORD = re.compile(r"(?<![\w/.\-])quipu(?=\s)")
+QUIPU_WORD = re.compile(r"(?<![\w/.\-])(?:sigil|quipu)(?=\s)")  # docs say sigil; quipu for one release
 FLAG = re.compile(r"--[a-z][a-z0-9-]*")
 SPANNED = re.compile(r"`([^`]+)`")
 PLANNED_MARKER = re.compile(r"planned[^.\n)]{0,120}?#(\d+)\b")
@@ -100,7 +100,7 @@ def _scan_command(path, no, display, src, out):
         tokens = list(_tokens_before_comment(shlex.split(src)))
     except ValueError:
         return
-    if not tokens or tokens[0] != "quipu" or len(tokens) < 2:
+    if not tokens or tokens[0] not in ("sigil", "quipu") or len(tokens) < 2:
         return
     argv, cmd = tokens[1:], subcommand_of(tokens[1:])
     if cmd is None or cmd not in argv:
@@ -279,7 +279,7 @@ def run_cli(*args, stdin_text=None, cwd=None):
     model anywhere (reflect only ever runs with --fake).
     """
     return subprocess.run(
-        [sys.executable, "-m", "quipu", *args],
+        [sys.executable, "-m", "sigil", *args],
         capture_output=True, text=True, timeout=60, cwd=cwd,
         input=stdin_text, stdin=None if stdin_text is not None else subprocess.DEVNULL,
     )
@@ -638,7 +638,7 @@ def test_export_sft_record_shape(tmp_path):
     assert record["messages"][1]["content"] == "why did the box reboot at 03:02?"
     expected_meta = {"entry", "kind", "state", "agent", "project", "session", "created",
                      "confidence", "importance", "source", "evidence_kind", "evidence_bytes"}
-    assert set(record["meta"]["quipu"]) == expected_meta
+    assert set(record["meta"]["sigil"]) == expected_meta
 
 
 def test_stats_reports_promotion_rate_as_promoted_over_total(tmp_path):

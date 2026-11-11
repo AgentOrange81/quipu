@@ -407,7 +407,7 @@ def iter_entries(root: str | Path):
         try:
             text = p.read_text(encoding="utf-8", errors="replace")
             if not text.lstrip().startswith("---"):
-                continue  # not a quipu entry (hand-written note, README, ...)
+                continue  # not a sigil entry (hand-written note, README, ...)
             yield p, Entry.from_markdown(text)
         except (ValueError, OSError):
             continue

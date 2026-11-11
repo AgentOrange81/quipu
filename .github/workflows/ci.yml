@@ -31,10 +31,10 @@ jobs:
         run: pytest -q benchmarks/tests
       - name: end-to-end smoke (no model needed)
         run: |
-          python -m quipu --vault /tmp/v init
-          python -m quipu --vault /tmp/v write --kind decision --state promoted \
+          python -m sigil --vault /tmp/v init
+          python -m sigil --vault /tmp/v write --kind decision --state promoted \
             --summary "markdown is the source of truth" --evidence "40 ms reindex" \
-            --ask "where does quipu keep its data?" --project quipu
-          python -m quipu --vault /tmp/v search markdown
-          python -m quipu --vault /tmp/v export sft --out /tmp/v/sft.jsonl
+            --ask "where does sigil keep its data?" --project sigil
+          python -m sigil --vault /tmp/v search markdown
+          python -m sigil --vault /tmp/v export sft --out /tmp/v/sft.jsonl
           test -s /tmp/v/sft.jsonl

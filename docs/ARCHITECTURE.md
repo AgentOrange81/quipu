@@ -4,13 +4,13 @@
 
 | file | responsibility | notes |
 |---|---|---|
-| `quipu/config.py` | vault paths, predicate vocabulary, gate threshold, LLM endpoint | `tomllib`, no deps |
-| `quipu/store.py` | `Entry` model, frontmatter read/write, iteration | hand-rolled frontmatter: no PyYAML needed, lists are JSON arrays (valid YAML inline lists) |
-| `quipu/index.py` | SQLite schema, FTS5 rebuild, search, stats | the db is disposable |
-| `quipu/graph.py` | entities, temporal edges, timeline, neighbours, hub materialisation | closed predicate vocabulary; canonical names |
-| `quipu/promote.py` | capture, reflection, proposal parsing, the gate, provider adapters | `FakeProvider` for tests/CI, `HttpProvider` for any OpenAI-compatible endpoint |
-| `quipu/export.py` | SFT / preference / graph export, dataset report | provenance in every record |
-| `quipu/cli.py` | argparse surface | no click/typer dependency |
+| `sigil/config.py` | vault paths, predicate vocabulary, gate threshold, LLM endpoint | `tomllib`, no deps |
+| `sigil/store.py` | `Entry` model, frontmatter read/write, iteration | hand-rolled frontmatter: no PyYAML needed, lists are JSON arrays (valid YAML inline lists) |
+| `sigil/index.py` | SQLite schema, FTS5 rebuild, search, stats | the db is disposable |
+| `sigil/graph.py` | entities, temporal edges, timeline, neighbours, hub materialisation | closed predicate vocabulary; canonical names |
+| `sigil/promote.py` | capture, reflection, proposal parsing, the gate, provider adapters | `FakeProvider` for tests/CI, `HttpProvider` for any OpenAI-compatible endpoint |
+| `sigil/export.py` | SFT / preference / graph export, dataset report | provenance in every record |
+| `sigil/cli.py` | argparse surface | no click/typer dependency |
 
 Runtime dependencies: **none** (stdlib only). Dev: pytest + ruff.
 
@@ -53,7 +53,7 @@ boosting) before any reranker, which is the target to beat honestly on LongMemEv
 ## Extension points
 
 - **Provider**: `complete(prompt) -> str`. Any HTTP endpoint, or your own class with that one method.
-- **Predicates**: `predicates` in `.quipu/config.toml`.
+- **Predicates**: `predicates` in `.sigil/config.toml`.
 - **Promotion policy**: replace `promote.apply()`; the gate is one expression on purpose.
 - **Exporters**: `export.py` functions each take `(cfg, out)`; a new dataset is a new function.
 

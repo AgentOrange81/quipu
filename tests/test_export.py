@@ -26,7 +26,7 @@ def test_sft_only_from_promoted_with_ask(cfg):
     assert n == 2
     rows = [json.loads(line) for line in out.read_text().splitlines()]
     assert all(r["messages"][-1]["role"] == "assistant" for r in rows)
-    assert all(r["meta"]["quipu"]["state"] == "promoted" for r in rows)
+    assert all(r["meta"]["sigil"]["state"] == "promoted" for r in rows)
     assert "chatter" not in out.read_text()
 
 
