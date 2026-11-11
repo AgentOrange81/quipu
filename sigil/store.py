@@ -39,7 +39,7 @@ NUMBER_RE = re.compile(r"^-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?$")
 #: a claim anybody made (#30).
 TRANSCRIPT_MARKERS = ("FILES:", "GATE:", "MAP:")
 
-#: A path on its own - "quipu/graph.py", "/home/dirk/x.md" - is a file listing, not a sentence.
+#: A path on its own - "sigil/graph.py", "/home/dirk/x.md" - is a file listing, not a sentence.
 _BARE_PATH_RE = re.compile(r"^[\w.~@+-]+(?:/[\w.~@+-]+)*\.[A-Za-z0-9]{1,8}$")
 
 #: A lowercase word of three letters or more: the mark of prose.
@@ -78,7 +78,7 @@ def looks_like_transcript(summary: str) -> bool:
 #: A summary is the retrieval handle: it is what ranks, what a brief line shows, and what an SFT example
 #: is made of. Past this size it stops being a handle and becomes a blob — the class of entry that ranked
 #: badly for three separate measured reasons in October and could not be fixed by any ranking lever.
-#: Enforced at the CAPTURE surface (`quipu write`, MCP write), not in `write_entry`: an importer migrating
+#: Enforced at the CAPTURE surface (`sigil write`, MCP write), not in `write_entry`: an importer migrating
 #: 800 historical notes must not be blocked by a rule about new ones.
 SUMMARY_LIMIT_BYTES = 280
 

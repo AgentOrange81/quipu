@@ -24,9 +24,9 @@ Before anything else each run asks the audit whether the index still agrees with
 reindexes if it does not: a client holding older code can blank derived columns that every other
 surface never reads (#128), and a fifteen-minute timer is a better repair interval than a human.
 
-    quipu-capture --list                  # candidates, run nothing
-    quipu-capture --limit 3               # reflect up to 3 (the timer's normal mode)
-    quipu-capture --min-prose 5000 --all  # a one-off backfill over everything in the window
+    sigil-capture --list                   # candidates, run nothing
+    sigil-capture --limit 3                # reflect up to 3 (the timer's normal mode)
+    sigil-capture --min-prose 5000 --all   # a one-off backfill over everything in the window
 """
 from __future__ import annotations
 

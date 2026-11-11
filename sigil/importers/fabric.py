@@ -1,4 +1,4 @@
-"""Fabric (Icarus) corpus -> quipu entries.
+"""Fabric (Icarus) corpus -> sigil entries.
 
 A fabric entry is a markdown file with YAML-ish frontmatter::
 
@@ -21,7 +21,7 @@ A fabric entry is a markdown file with YAML-ish frontmatter::
 
     the body
 
-Mapping onto a quipu entry:
+Mapping onto a sigil entry:
 
     type            -> kind     decision/lesson/fact/handoff/conclusion/question keep
                                their name, session/code-session become `capture`,
@@ -56,7 +56,7 @@ from pathlib import Path
 from ..config import DEFAULT_PROMOTE_THRESHOLD
 from ..store import Entry, first_prose_line, looks_like_blob, looks_like_transcript, write_entry
 
-#: fabric `type` -> quipu `kind`; unknown types fall back to DEFAULT_KIND
+#: fabric `type` -> sigil `kind`; unknown types fall back to DEFAULT_KIND
 KIND_BY_TYPE = {
     "decision": "decision",
     "lesson": "lesson",
@@ -69,14 +69,14 @@ KIND_BY_TYPE = {
 }
 DEFAULT_KIND = "conclusion"
 
-#: fabric `training_value` -> quipu `state`; missing or unknown values fall back to DEFAULT_STATE
+#: fabric `training_value` -> sigil `state`; missing or unknown values fall back to DEFAULT_STATE
 STATE_BY_TRAINING_VALUE = {"high": "promoted", "normal": "promoted", "low": "pruned"}
 DEFAULT_STATE = "raw"
 
 #: fabric types whose low-value entries are corpus noise, not memory
 NOISE_TYPES = frozenset({"session", "code-session"})
 
-#: fabric `training_value` -> store `importance`, so a promoted entry clears quipu's own
+#: fabric `training_value` -> store `importance`, so a promoted entry clears sigil's own
 #: promotion threshold (cfg.promote_threshold, 0.5) and a pruned one does not
 IMPORTANCE_BY_TRAINING_VALUE = {"high": 0.9, "normal": 0.7, "low": 0.3}
 
@@ -140,14 +140,14 @@ def import_fabric(src_dir: str | Path, vault_root: str | Path, *,
                   promote_threshold: float = DEFAULT_PROMOTE_THRESHOLD,
                   recurse: bool = False,
                   skip_dirs: frozenset[str] | set[str] | None = None) -> ImportResult:
-    """Convert a fabric corpus into quipu entries under `vault_root`.
+    """Convert a fabric corpus into sigil entries under `vault_root`.
 
     Only the files directly in `src_dir` are considered by default -- a corpus keeps its stubs and
     duplicates in sibling directories, and those are not what an import is for. `recurse=True`
     walks the whole tree instead and refuses `skip_dirs` (defaulting to `DEFAULT_SKIP_DIRS`), so a
     corpus with a different shape can be imported without a code change.
 
-    `promote_threshold` is quipu's own promotion gate: an entry is promoted only when its
+    `promote_threshold` is sigil's own promotion gate: an entry is promoted only when its
     importance clears it AND it carries evidence - the same gate promote.py applies. Without it
     509 of 780 imported entries claimed `promoted` while having no evidence at all (#26).
     """

@@ -18,7 +18,7 @@ query is the one shape where lexical matching is simply right). Reciprocal rank 
 phrase at 1.00 and costs 0.01 R@5 against vector-only, which is the trade this module takes.
 
 Vectors are DERIVED data, like the FTS index: they live in `.sigil/index.db` and are rebuilt with
-`quipu embed`. Losing the index costs a re-embed, never a memory. When no vectors are present,
+`sigil embed`. Losing the index costs a re-embed, never a memory. When no vectors are present,
 `search --hybrid` degrades to the lexical ranking instead of failing.
 """
 from __future__ import annotations
