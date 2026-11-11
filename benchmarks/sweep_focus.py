@@ -23,6 +23,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+from benchmarks.vault import require_index  # noqa: E402
 from sigil import index as index_mod  # noqa: E402
 
 #: English function words plus the interrogatives a question-shaped query carries. A closed list on
@@ -108,7 +109,7 @@ def score_synthetic(make):
 def main():
     from benchmarks.live_queries import QUERIES
     arg = Path(sys.argv[1]) if len(sys.argv) > 1 else None
-    db = (arg / ".quipu" / "index.db") if arg else None
+    db = require_index(arg) if arg else None
     print(f"{'variant':<18}{'live ok':>8}{'live prom':>10}{'R@5':>8}{'R@10':>8}{'MRR':>8}")
     for name, kw in VARIANTS.items():
         make = make_search(**kw)

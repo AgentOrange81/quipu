@@ -24,6 +24,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import benchmarks.run as bench  # noqa: E402
 from benchmarks.loaders import load_synthetic  # noqa: E402
+from benchmarks.vault import index_db  # noqa: E402
 from sigil.embed import RRF_K, RRF_VECTOR_WEIGHT  # noqa: E402
 from sigil.index import reindex, search  # noqa: E402
 from sigil.store import write_entry  # noqa: E402
@@ -51,12 +52,12 @@ def main() -> int:
     dataset = load_synthetic()
     ks = [5, 10]
 
-    with tempfile.TemporaryDirectory(prefix="quipu-hybrid-") as tmp:
+    with tempfile.TemporaryDirectory(prefix="sigil-hybrid-") as tmp:
         root = Path(tmp) / "vault"
         root.mkdir(parents=True)
         for e in dataset.entries:
             write_entry(root, e)
-        db = root / ".quipu" / "index.db"
+        db = index_db(root)
         reindex(root, db)
 
         texts = [f"{e.summary}\n{e.body}"[:1500] for e in dataset.entries]

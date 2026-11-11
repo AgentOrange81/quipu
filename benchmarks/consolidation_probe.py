@@ -13,7 +13,7 @@ What the second one exposed: 190 of the 206 high-similarity pairs came from a si
 importer was producing before #54. So a similarity-driven consolidator would have spent its first pass
 merging import damage, which is the opposite of what the corpus needed.
 
-Run:  .venv/bin/python -m benchmarks.consolidation_probe ~/quipu-vault
+Run:  .venv/bin/python -m benchmarks.consolidation_probe ~/sigil-vault
 """
 from __future__ import annotations
 
@@ -23,6 +23,7 @@ import sys
 from collections import Counter, defaultdict
 from pathlib import Path
 
+from benchmarks.vault import require_index
 from sigil import embed as embed_mod
 from sigil import index as index_mod
 from sigil.store import iter_entries
@@ -90,7 +91,7 @@ def semantic(db: Path, promoted: list, cutoff: float = 0.86) -> None:
         c.close()
     print(f"\npromoted with vectors: {len(vectors)}/{len(promoted)}")
     if len(vectors) < 2:
-        print("  no embeddings: run `quipu embed` first (see docs/USING.md)")
+        print("  no embeddings: run `sigil embed` first (see docs/USING.md)")
         return
     ids = list(vectors)
     pairs = []
@@ -121,11 +122,11 @@ def semantic(db: Path, promoted: list, cutoff: float = 0.86) -> None:
 
 
 def main() -> int:
-    vault = Path(sys.argv[1] if len(sys.argv) > 1 else "~/quipu-vault").expanduser()
+    vault = Path(sys.argv[1] if len(sys.argv) > 1 else "~/sigil-vault").expanduser()
     promoted = [e for _p, e in iter_entries(vault) if e.state == "promoted"]
     print(f"vault {vault}: {len(promoted)} promoted entries\n")
     lexical(vault, promoted)
-    semantic(vault / ".quipu" / "index.db", promoted)
+    semantic(require_index(vault), promoted)
     return 0
 
 

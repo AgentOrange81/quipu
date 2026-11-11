@@ -107,7 +107,7 @@ def _ledger_path(cfg, key: str) -> Path:
     Derived state, like the index: deleting it costs a re-read and nothing else. Keyed by the session
     id when there is one, so a session that grows between attempts keeps its record.
     """
-    return cfg.root / ".quipu" / "chunks" / f"{key}.json"
+    return cfg.meta_dir / "chunks" / f"{key}.json"
 
 
 def _load_ledger(path: Path) -> dict:
