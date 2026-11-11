@@ -9,7 +9,7 @@ from pathlib import Path
 from .store import Entry, iter_entries
 
 #: The schema version of this db, carried in `PRAGMA user_version`. A db written by an older
-#: quipu has a lower number. The index is derived from the markdown, so an old db is a rebuild
+#: sigil has a lower number. The index is derived from the markdown, so an old db is a rebuild
 #: away from being current - never a vault that cannot be opened (#23).
 SCHEMA_VERSION = 2
 

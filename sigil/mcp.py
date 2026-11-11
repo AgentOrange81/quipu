@@ -1,6 +1,6 @@
 """MCP server over stdio — JSON-RPC 2.0, one object per line, no dependencies.
 
-An agent that shells out to `quipu search` pays a process per call and has to parse a table; worse, it
+An agent that shells out to `sigil search` pays a process per call and has to parse a table; worse, it
 has to be told to look at all. Exposing the vault as MCP tools makes recall something the agent can do
 the way it does anything else, and it is the difference between a memory system that is available and one
 that is used.
@@ -60,7 +60,7 @@ def _neighbors(cfg, args: dict) -> dict:
 
 
 def _write(cfg, args: dict) -> dict:
-    """The same path as `quipu write`: the entry hits the markdown first, then its claims are asserted.
+    """The same path as `sigil write`: the entry hits the markdown first, then its claims are asserted.
 
     A bad edge spec must not cost the memory, so the entry is written before any edge is validated and the
     caller learns which spec failed while the entry keeps its place on disk.
@@ -68,7 +68,7 @@ def _write(cfg, args: dict) -> dict:
     summary = str(args.get("summary") or "").strip()
     if not summary:
         raise ValueError("write needs a summary — the retrieval handle of the entry")
-    # same rule as `quipu write`, and here there is no opt-out: the size limit is what keeps a summary a
+    # same rule as `sigil write`, and here there is no opt-out: the size limit is what keeps a summary a
     # retrieval handle instead of a blob (#51)
     check_summary(summary)
     specs = list(args.get("edges") or [])
@@ -102,7 +102,7 @@ def _write(cfg, args: dict) -> dict:
     # the graph follows supersedes (#20), the same way the CLI does: the old windows close and the
     # closures are written into the markdown, so a rebuild reproduces history instead of resurrecting it
     closed = graph_mod.close_superseded(cfg, e.supersedes, e) if e.supersedes else []
-    # Always index. A CLI caller can run `quipu reindex` after a failed write; an MCP caller cannot,
+    # Always index. A CLI caller can run `sigil reindex` after a failed write; an MCP caller cannot,
     # so leaving the entry unindexed would mean a memory that was accepted and then forgotten. A bad
     # edge spec costs the claim, never the memory — the same trade the loader makes (#24, #30).
     index_mod.reindex(cfg.root, cfg.db_path)

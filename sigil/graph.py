@@ -174,7 +174,7 @@ def _identity_rows(rows, spellings: list[str]) -> list[dict]:
 
 # --- the graph lives in the markdown (#24) ------------------------------------------------
 #
-# `rm .quipu/index.db` must lose nothing: the notes are the truth, and the db is derived from
+# `rm .sigil/index.db` must lose nothing: the notes are the truth, and the db is derived from
 # them. So an asserted edge is written into the entry that asserted it, and a closed window is
 # written into that same entry. Without this the temporal graph - the most valuable record in the
 # system - existed in exactly one place, and that place was the file the design calls disposable.
@@ -270,17 +270,17 @@ def entry_records_edge(entry: Entry, spec: str) -> bool:
 def _require_carrier(cfg: Config, note_id: str, verb: str) -> Path | None:
     """The entry that must carry this edge, or None when no carrier is claimed.
 
-    An ABSENT carrier stays legal: `quipu edge a part_of b` with no `--note` is a documented
+    An ABSENT carrier stays legal: `sigil edge a part_of b` with no `--note` is a documented
     form, and it warns on stderr instead of refusing.
 
     A carrier that is GIVEN but names no entry is a usage error, and it must be refused before
     anything is written. The old path handed `note_id` to `record_edge()`, whose `find_entry()`
     returned None, so `_update_entry` returned False and nobody was told: the edge existed only
-    in SQLite, and `rm .quipu/index.db` + `reindex` deleted a live belief (#94). A refusal that
+    in SQLite, and `rm .sigil/index.db` + `reindex` deleted a live belief (#94). A refusal that
     writes nothing is the only safe one - a row without a carrier is the defect itself.
 
     The message names the carrier verbatim, the fix (pass the entry id) and the recovery for a
-    vault that already holds such an edge (`quipu repair --edges`).
+    vault that already holds such an edge (`sigil repair --edges`).
     """
     if not note_id:
         return None
@@ -464,7 +464,7 @@ def close_superseded(cfg: Config, old_ids, new_entry: Entry, at: str | None = No
     `timeline` and `export graph` showed two live windows for one fact and the stale claim was
     indistinguishable from the current one. Closing is deliberate, dated, and written into the
     markdown: the closure goes into the entry that asserted the edge (`record_closure`), so
-    `rm .quipu/index.db` + `reindex` reproduces the closed window instead of resurrecting it.
+    `rm .sigil/index.db` + `reindex` reproduces the closed window instead of resurrecting it.
 
     An edge the new entry asserts ITSELF is left open on purpose. `_assert_edge` is idempotent by
     (src, predicate, dst), so re-asserting a live triple reuses that edge; closing it here would

@@ -1,10 +1,10 @@
-"""`quipu ask-backfill` — give entries the question they answer, so the corpus can become training data (#27).
+"""`sigil ask-backfill` — give entries the question they answer, so the corpus can become training data (#27).
 
 `ask` is what turns a memory into a trainable pair: the question a searcher would have asked, paired with
 the entry's summary/evidence as the answer. Without it an entry is recall only. On this vault 17 of 864
-entries had one, which is why `quipu export` produced 18 SFT examples.
+entries had one, which is why `sigil export` produced 18 SFT examples.
 
-This is the one place quipu calls a model, and it is deliberately the narrowest possible call:
+This is the one place sigil calls a model, and it is deliberately the narrowest possible call:
 
 - **One question per entry.** ~40 output tokens, no chain, no tools, temperature 0.
 - **Any OpenAI-compatible endpoint**, so it runs against the free on-box tier or a cloud key without the
@@ -12,7 +12,7 @@ This is the one place quipu calls a model, and it is deliberately the narrowest 
 - **Every answer is validated before it is stored.** It must be a single line ending in `?`, it must not
   be a restatement of the summary, and it must be 12..200 bytes. A model that returns prose, a quote, or
   an empty string costs that entry and nothing else — the entry keeps its place, reported as skipped.
-- **Dry run by default.** `--apply` writes the `ask:` line in place, like `quipu repair`; nothing is
+- **Dry run by default.** `--apply` writes the `ask:` line in place, like `sigil repair`; nothing is
   renamed and the body is not touched.
 
 The judgement that cannot be automated: whether the question is the one a *human* would ask. That is why

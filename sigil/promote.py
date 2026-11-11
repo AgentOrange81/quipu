@@ -472,7 +472,7 @@ def apply(proposals: list[Proposal], cfg: Config, agent: str = "", project: str 
 
     A model's proposal is a CALLER like any other, so its edges face the closed vocabulary here,
     at the write boundary (#103). The first real pass over a live session proposed
-    `main:implemented_by:quipu`; the spec went into the markdown, the graph refused it, and `audit`
+    `main:implemented_by:sigil`; the spec went into the markdown, the graph refused it, and `audit`
     reported it from then on — the claim was stored where it could never be queried. A refused spec
     is now reported in `report["skipped_edges"]` and written nowhere: the edge is the claim, the
     entry is the memory, and only the claim was bad.
@@ -544,7 +544,7 @@ def apply(proposals: list[Proposal], cfg: Config, agent: str = "", project: str 
                 except ValueError:
                     continue  # predicate outside the closed vocabulary: skip, don't poison the graph
         # a correction proposed by the reflection pass closes the belief it corrects (#20), the same
-        # way `quipu write --supersedes` does; an edge the new entry restates is left live
+        # way `sigil write --supersedes` does; an edge the new entry restates is left live
         if e.supersedes:
             close_superseded(cfg, e.supersedes, e)
     if report is not None:

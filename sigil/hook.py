@@ -1,4 +1,4 @@
-"""`quipu hook` — the session-end entry point a framework calls, without embedding quipu (#3).
+"""`sigil hook` — the session-end entry point a framework calls, without embedding sigil (#3).
 
 A memory system that nobody calls gathers nothing, and a hook that fails quietly is worse than no hook:
 the session ends, the framework says "memory: ok", and nothing was written. This module is the one place

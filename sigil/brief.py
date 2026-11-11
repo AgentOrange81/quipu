@@ -1,4 +1,4 @@
-"""`quipu brief` — the standing answer an agent boots with, instead of a search it has to think of (#51).
+"""`sigil brief` — the standing answer an agent boots with, instead of a search it has to think of (#51).
 
 The problem this solves is not retrieval quality, it is *startup*. A vault of 860 entries answers any
 single question well, but an agent that has just woken up does not know which question to ask. Prior art
@@ -11,7 +11,7 @@ and a one-line pointer to the evidence. No model, no ranking, no query — sorti
 recency, which is reproducible and cheap.
 
 Where it is written matters. The brief is DERIVED, like the FTS table and the vectors: it goes under
-`.quipu/brief/`, never into `notes/`, because a generated page beside the entries would be ingested as an
+`.sigil/brief/`, never into `notes/`, because a generated page beside the entries would be ingested as an
 entry — the exact self-magnet failure measured on this vault in October (a note that quoted the
 questions ranked first for all of them).
 """

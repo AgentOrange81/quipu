@@ -1,4 +1,4 @@
-"""`quipu repair` — fix imported notes whose summary still carries its YAML quotes (#58, from #54).
+"""`sigil repair` — fix imported notes whose summary still carries its YAML quotes (#58, from #54).
 
 The importer read frontmatter line-by-line, so a summary written as a single-quoted YAML scalar arrived
 with its quotes attached and cut off at the wrap. The parser is fixed now, but a repaired parser does not
@@ -8,7 +8,7 @@ ranking feature silently works on the wrong text.
 Two sources, in this order, because neither alone covers the corpus:
 
 1. **The fabric origin, by frontmatter `id`** (not by filename — fabric names files by slug and suffix,
-   while `id:` in the frontmatter is the id quipu kept). 74 of 88 here.
+   while `id:` in the frontmatter is the id sigil kept). 74 of 88 here.
 2. **The entry's own body**, whose first H1 line is a copy of the summary the import duplicated. 14 here.
 
 Nothing is deleted, nothing is renamed: the file keeps its path, and only the `summary` line plus the
@@ -171,7 +171,7 @@ def apply(vault: str | Path, result: Result) -> int:
 
 
 def reindex(vault: str | Path) -> None:
-    """The same recovery `quipu reindex` performs — index AND graph.
+    """The same recovery `sigil reindex` performs — index AND graph.
 
     Indexing alone leaves the graph table exactly as it was, so a repair that just rewrote the
     markdown left an index that disagreed with it: `audit` kept reporting the edges the pass had
@@ -191,7 +191,7 @@ def reindex(vault: str | Path) -> None:
 # The edges the index holds and the markdown does not (#94)
 #
 # `add_edge` refuses a carrier that names no entry now, but a vault written before that rule holds
-# edges recorded nowhere: `rm .quipu/index.db` + `reindex` deletes them. Each of them is recoverable
+# edges recorded nowhere: `rm .sigil/index.db` + `reindex` deletes them. Each of them is recoverable
 # from its own `src`, because the caller asserted the edge against an entry and used that entry's id
 # as the entity name. `note_id` is only a fallback — it is exactly the field a bad caller filled with
 # prose, which is how the edges got here.

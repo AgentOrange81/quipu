@@ -139,7 +139,7 @@ def cmd_write(args) -> int:
               supersedes=list(args.supersedes or []), edges=order)
     # The entry is written BEFORE the edges are asserted (docs/USING.md): a bad predicate must
     # not cost the memory. The write then fails and the entry is left on disk but unindexed;
-    # `quipu reindex` puts it back, skipping the broken claim and saying so.
+    # `sigil reindex` puts it back, skipping the broken claim and saying so.
     p = write_entry(cfg.root, e)
     failed = 0
     for _spec, src, predicate, dst in specs:
@@ -514,7 +514,7 @@ def audit_report(cfg) -> dict:
             problems.append(f"{e.id}: empty summary")
         if looks_like_blob(e.summary):
             # a blob where the handle belongs (#77): imported before the write boundary refused the
-            # shape. `quipu reindex` keeps it searchable, so the audit is how it stays findable.
+            # shape. `sigil reindex` keeps it searchable, so the audit is how it stays findable.
             problems.append(f"{e.id}: blob summary (re-import or rewrite as one sentence)")
         for spec in e.edges:
             # the markdown is what a rebuild replays, so the audit validates IT, not only the rows
@@ -535,7 +535,7 @@ def audit_report(cfg) -> dict:
             # how the damage stays visible instead of silently ranking 88 entries on a mangled handle.
             problems.append(f"{e.id}: summary starts with a quote character (re-import or edit)")
     # the graph must live in the markdown (#24): an edge no entry records is data that
-    # `rm .quipu/index.db` would take with it.
+    # `rm .sigil/index.db` would take with it.
     c = index_mod.connect(cfg.db_path)
     rows = c.execute("SELECT id, src, predicate, dst, note_id, valid_to FROM edges").fetchall()
     version = c.execute("PRAGMA user_version").fetchone()[0]
