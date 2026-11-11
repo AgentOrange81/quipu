@@ -241,7 +241,13 @@ def handle(cfg, msg: dict) -> dict | None:
 
 
 def serve(vault: str | Path) -> int:
-    cfg = config_mod.load(vault, create=False)
+    try:
+        cfg = config_mod.load(vault, create=False)
+    except config_mod.VaultNotFound as exc:
+        # A server that starts against a path it did not find answers every query from nothing and
+        # looks healthy doing it (#141). Refuse, name the path, and let the harness show the failure.
+        _log(f"refusing to serve — {exc}")
+        return 2
     note = index_mod.refresh_if_stale(cfg)
     if note:
         _log(note)

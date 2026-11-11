@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- **a path that is not a vault is refused, not created and answered from** (#141). Reading through a
+  wrong `--vault`, a moved vault or a half-migrated host used to create a vault there and answer `[]` —
+  a wrong answer shaped exactly like "there is no memory about this". `search`, `timeline`, `neighbors`,
+  `stats`, `audit`, `brief`, every write, `sigil mcp` and the capture timer now fail loudly, name the
+  path they tried, and create nothing. `init`, `create=True` and `--dry-run` still work on a path that
+  does not exist yet.
+
 ## 0.9.0 — 2026-11-11
 
 **The project is Sigil.** Distribution `sigil-memory`, CLI `sigil`, vault `~/sigil-vault`. `quipu` keeps

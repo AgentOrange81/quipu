@@ -398,7 +398,11 @@ class QuipuMemoryProvider(MemoryProvider):
         payload = dict(args)
         payload.setdefault("kind", "fact")
         payload.setdefault("session", self._session_id)
-        cfg = config_mod.load(self._vault)
+        try:
+            cfg = config_mod.load(self._vault)
+        except config_mod.VaultNotFound as exc:
+            # a write must not mint a fresh vault at a typo'd path (#141) — return the reason instead
+            return json.dumps({"error": str(exc)})
         evidence = str(payload.get("evidence") or "").strip()
         try:
             importance = float(payload.get("importance") or 0.0)

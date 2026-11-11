@@ -236,8 +236,57 @@ def meta_dir_for(root: str | Path) -> Path:
     return new if (new.exists() or not (root / LEGACY_META_DIR).exists()) else root / LEGACY_META_DIR
 
 
+class VaultNotFound(RuntimeError):
+    """A path that is not a vault was opened for reading: say so, create nothing.
+
+    Opening a path that is not a vault used to create one there and answer from it, so a wrong
+    `--vault`, a moved checkout or a half-migrated host produced `[]` — indistinguishable from "this
+    vault has no memory about that", the worst shape a memory tool can fail in (#141). Every caller
+    that opens a vault for reading now has to say what happened instead. `init` and `create=True`
+    still create, because that is their job.
+    """
+
+
+def looks_like_vault(root: str | Path) -> bool:
+    """Does this directory carry a vault's shape — notes, entities, or derived-state meta?
+
+    Deliberately generous about which of the three exists: a vault whose index was deleted, or one
+    written by hand before `.quipu` existed, is still somebody's vault. The failure this guards
+    against is a path with *none* of them, which is a path nobody ever initialised.
+    """
+    root = Path(root)
+    if not root.is_dir():
+        return False
+    return any((root / d).is_dir() for d in ("notes", "entities", META_DIR, LEGACY_META_DIR))
+
+
+def _not_a_vault(root: Path) -> VaultNotFound:
+    """The refusal, in the words the caller needs: the path, what is missing, and both ways out."""
+    hint = f"check --vault (or SIGIL_VAULT), or create one with `sigil init --vault {root}`"
+    if not root.exists():
+        return VaultNotFound(f"no such vault: {root} does not exist — {hint}. Nothing was created.")
+    if not root.is_dir():
+        return VaultNotFound(f"not a vault: {root} is a file, not a directory — {hint}.")
+    return VaultNotFound(
+        f"not a vault: {root} exists but holds no notes/, entities/ or .sigil/ — {hint}. "
+        f"Nothing was created.")
+
+
+def load_lenient(root: str | Path) -> Config:
+    """Config for a caller that must read but must not create — a dry run.
+
+    `sigil import --dry-run` against a vault that does not exist yet is a legitimate question ("what
+    would this write?"), so it may look at a path that is not a vault: it gets that vault's own
+    settings when there is a vault there, and defaults when there is not. It writes nothing either way.
+    """
+    root = Path(root).expanduser().resolve()
+    return load(root) if looks_like_vault(root) else Config(root=root)
+
+
 def load(root: str | Path, create: bool = False) -> Config:
     root = Path(root).expanduser().resolve()
+    if not create and not looks_like_vault(root):
+        raise _not_a_vault(root)
     cfg = Config(root=root)
     path = cfg.config_path
     if path.exists():
