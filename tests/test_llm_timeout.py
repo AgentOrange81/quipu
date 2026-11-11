@@ -2,7 +2,7 @@
 
 Black-box contract tests, written against the CONTRACT — `Config.llm_timeout` (default
 `DEFAULT_LLM_TIMEOUT`, 600 s since 0.5.2) saved
-as `timeout = N` inside the `[llm]` block of `.quipu/config.toml`, `clil._provider()` wiring it
+as `timeout = N` inside the `[llm]` block of `.sigil/config.toml`, `clil._provider()` wiring it
 into `HttpProvider`, `--endpoint-timeout` on `reflect` and `hook` overriding it per command, and
 a hard `ValueError` naming `llm.timeout` for any value `<= 0` or non-integer — never against an
 implementation. On main (c476a61) the field does not exist: these tests fail there on purpose and
@@ -33,7 +33,7 @@ def test_config_round_trip_of_llm_timeout(tmp_path):
     cfg.llm_timeout = 240
     cfg.save()
 
-    text = (vault / ".quipu" / "config.toml").read_text(encoding="utf-8")
+    text = (vault / ".sigil" / "config.toml").read_text(encoding="utf-8")
     data = tomllib.loads(text) if tomllib else config_mod._mini_toml(text)
     assert data["llm"]["timeout"] == 240, f"the raw [llm] block must carry the timeout:\n{text}"
 
@@ -119,7 +119,7 @@ def test_a_value_that_cannot_be_a_timeout_is_refused(tmp_path, bad):
     vault = tmp_path / "vault"
     cfg = config_mod.load(vault, create=True)
     cfg.save()
-    toml_path = vault / ".quipu" / "config.toml"
+    toml_path = vault / ".sigil" / "config.toml"
     text = toml_path.read_text(encoding="utf-8")
     assert "[llm]" in text
     toml_path.write_text(text.replace("[llm]\n", f"[llm]\ntimeout = {bad}\n"), encoding="utf-8")

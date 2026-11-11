@@ -1,4 +1,4 @@
-"""`rm .quipu/index.db` + `quipu reindex` reproduces the graph from the markdown (#24).
+"""`rm .sigil/index.db` + `quipu reindex` reproduces the graph from the markdown (#24).
 
 The claim under test: edges and closed windows live in the entries' frontmatter (`edges:` /
 `edge_closures:`), and the reindex path folds the db-only leftovers into the entries, clears the
@@ -40,7 +40,7 @@ def run_cli(*args, stdin_text=None, cwd=None):
 
 
 def _clear_db(db_path: Path) -> None:
-    """Delete the sqlite index, WAL and SHM sidecars — exactly what `rm .quipu/index.db` means."""
+    """Delete the sqlite index, WAL and SHM sidecars — exactly what `rm .sigil/index.db` means."""
     db_path.unlink(missing_ok=True)
     Path(str(db_path) + "-wal").unlink(missing_ok=True)
     Path(str(db_path) + "-shm").unlink(missing_ok=True)

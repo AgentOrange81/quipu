@@ -460,10 +460,10 @@ def test_readme_quickstart_init_runs(tmp_path):
 
 def test_init_creates_a_vault_with_the_documented_config(tmp_path):
     vault = make_vault(tmp_path)
-    # docs/USING.md:60 — promote_threshold is 0.5 in .quipu/config.toml
+    # docs/USING.md:60 — promote_threshold is 0.5 in .sigil/config.toml
     cfg = config_mod.load(vault, create=False)
     assert cfg.promote_threshold == 0.5
-    assert "promote_threshold = 0.5" in (vault / ".quipu" / "config.toml").read_text(encoding="utf-8")
+    assert "promote_threshold = 0.5" in (vault / ".sigil" / "config.toml").read_text(encoding="utf-8")
     # docs/USING.md:131 — the reflection endpoint default
     assert cfg.llm_base_url == "http://127.0.0.1:8080/v1"
 

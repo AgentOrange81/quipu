@@ -662,7 +662,7 @@ def cmd_brief(args) -> int:
         sys.stdout.write(text)
         return 0
     rel = args.out or brief_mod.default_relpath(scope)
-    path = Path(cfg.root) / ".quipu" / rel
+    path = cfg.meta_dir / rel
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(text, encoding="utf-8")
     lines = text.count("\n- ") + text.count("\n  - ")

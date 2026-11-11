@@ -64,14 +64,21 @@ def _load_submodule(name: str):
 
 
 def _candidates(hermes_home: str = "") -> list[Path]:
-    """Vault lookup order: QUIPU_VAULT, <hermes_home>/quipu-vault, ~/quipu-vault."""
+    """Vault lookup order, new name first: SIGIL_VAULT|QUIPU_VAULT, <hermes_home>/sigil-vault|
+    quipu-vault, ~/sigil-vault|~/quipu-vault.
+
+    Both names resolve for one release: a profile whose `.env` still exports QUIPU_VAULT, or whose
+    vault directory has not been renamed yet, must keep finding its memory instead of starting empty.
+    """
     out: list[Path] = []
-    env = os.environ.get("QUIPU_VAULT")
-    if env:
-        out.append(Path(env).expanduser())
+    for var in ("SIGIL_VAULT", "QUIPU_VAULT"):
+        env = os.environ.get(var)
+        if env:
+            out.append(Path(env).expanduser())
     if hermes_home:
-        out.append(Path(hermes_home).expanduser() / "quipu-vault")
-    out.append(Path.home() / "quipu-vault")
+        home = Path(hermes_home).expanduser()
+        out += [home / "sigil-vault", home / "quipu-vault"]
+    out += [Path.home() / "sigil-vault", Path.home() / "quipu-vault"]
     return list(dict.fromkeys(out))
 
 
@@ -87,7 +94,11 @@ def _safe_session(session_id: str) -> str:
 
 
 def _db_path(vault: str | Path) -> Path:
-    return Path(vault) / ".quipu" / "index.db"
+    """A pre-rename vault keeps its index under `.quipu`; reading it there is the difference between
+    answering from memory and answering from nothing."""
+    root = Path(vault)
+    meta = root / ".sigil" if (root / ".sigil").exists() else root / ".quipu"
+    return meta / "index.db"
 
 
 def _schema(name: str, description: str, properties: dict[str, Any], required: list[str]) -> dict[str, Any]:
@@ -305,7 +316,7 @@ class QuipuMemoryProvider(MemoryProvider):
                 return
             _, record = item
             try:
-                path = Path(self._vault) / ".quipu" / f"session-{record['session']}.jsonl"
+                path = _db_path(self._vault).parent / f"session-{record['session']}.jsonl"
                 path.parent.mkdir(parents=True, exist_ok=True)
                 with path.open("a", encoding="utf-8") as fh:
                     fh.write(json.dumps(record, ensure_ascii=False) + "\n")

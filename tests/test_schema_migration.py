@@ -99,7 +99,7 @@ def test_a_db_from_an_older_schema_is_rebuilt_from_the_markdown_not_migrated(tmp
 
 
 def test_the_graph_survives_the_loss_of_the_db(tmp_path):
-    """`rm .quipu/index.db` must lose nothing: the edges and the closed windows are in the notes."""
+    """`rm .sigil/index.db` must lose nothing: the edges and the closed windows are in the notes."""
     cfg = load(tmp_path / "vault", create=True)
     e = Entry(kind="decision", state="promoted", summary="TRX40 is measured as DOCP 3200",
               evidence="bench", edges=["TRX40:measured_as:DOCP 3200"], created="2026-01-01T00:00:00Z")

@@ -300,7 +300,7 @@ def test_a_naming_lookup_that_fails_does_not_fail_the_pass(tmp_path, monkeypatch
 def test_the_index_carries_what_the_markdown_records(tmp_path):
     """#126 follow-up: the pass ends with a rebuild, so the derived columns must be filled then.
 
-    Measured on the live vault while checking the backfill: a read of `.quipu/index.db` straight after
+    Measured on the live vault while checking the backfill: a read of `.sigil/index.db` straight after
     a pass returned NULL `evidence_kind` and `model` on every entry the pass had written, while the
     markdown carried both. The columns were correct again after an explicit `reindex`, so the reader
     had raced the rebuild — but a reader cannot tell those apart, and the invariant at stake is the

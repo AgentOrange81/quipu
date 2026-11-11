@@ -5,7 +5,7 @@ reproducible from the body that makes it — `[[e2314ae5]]` in prose stays true 
 it would duplicate a derivable fact into markdown that `rebuild` then re-folds. Same reasoning as the
 project hub, so the same shape: derived at read time, nothing written.
 
-The audit rule is the other half: the vocabulary is closed per vault (`.quipu/config.toml` can extend
+The audit rule is the other half: the vocabulary is closed per vault (`.sigil/config.toml` can extend
 it, which is how the live vault legitimately carries `served_by`), and until now nothing reported an edge
 whose predicate is in neither place — a graph rots into 400 spellings of "uses" quietly.
 """

@@ -139,7 +139,7 @@ def is_cron_session(c: sqlite3.Connection, session_id: str) -> bool:
 
 def reflected_session_ids() -> set[str]:
     """Session ids some entry already carries — the strong signal that a pass produced something."""
-    db = VAULT / ".quipu" / "index.db"
+    db = config_mod.meta_dir_for(VAULT) / "index.db"
     if not db.exists():
         return set()
     c = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
@@ -227,7 +227,7 @@ def endpoint_up() -> tuple[bool, str]:
     """Is the configured chat endpoint answering? Reads the vault's own [llm] base_url."""
     url = "http://127.0.0.1:8080/v1"
     try:
-        text = (VAULT / ".quipu" / "config.toml").read_text(encoding="utf-8")
+        text = (config_mod.meta_dir_for(VAULT) / "config.toml").read_text(encoding="utf-8")
         block = text.split("[llm]", 1)[1].split("[", 1)[0]
         found = re.search(r'base_url\s*=\s*"([^"]+)"', block)
         if found:
@@ -311,8 +311,8 @@ def main(argv=None) -> int:
     if args.profiles_dir:
         PROFILES = Path(args.profiles_dir).expanduser()
     if args.vault or args.profiles_dir:
-        DONE = VAULT / ".quipu" / "capture-done.txt"
-        REPASS = VAULT / ".quipu" / "capture-repass.json"
+        DONE = config_mod.meta_dir_for(VAULT) / "capture-done.txt"
+        REPASS = config_mod.meta_dir_for(VAULT) / "capture-repass.json"
 
     # before anything else: the derived copy must agree with the markdown, or a session pass writes on
     # top of an index that already lost fields (the audit's own check, run on a timer — #128)
