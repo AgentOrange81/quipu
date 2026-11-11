@@ -8,10 +8,10 @@ CI builds the artifacts from the tag; everything below is what a person does bef
 | file | what it holds | who reads it |
 |---|---|---|
 | `pyproject.toml` | `version = "0.3.0"` | the wheel and sdist filenames, and pip |
-| `quipu/__init__.py` | `__version__ = "0.3.0"` | `quipu --version`, the MCP `serverInfo.version` |
+| `sigil/__init__.py` | `__version__ = "0.3.0"` | `sigil --version`, the MCP `serverInfo.version` |
 
 Both must move together, in the same commit. A mismatch is not a build error: the wheel installs
-and `quipu --version` prints a string the artifact does not carry, so the published version and
+and `sigil --version` prints a string the artifact does not carry, so the published version and
 the reported version disagree with no signal that anything is wrong.
 
 ## CHANGELOG first
@@ -33,7 +33,7 @@ publication is a body nobody can trust.
 ```bash
 python -m build
 python -m venv /tmp/relcheck && /tmp/relcheck/bin/pip install dist/quipu-0.3.0-py3-none-any.whl
-/tmp/relcheck/bin/quipu --version
+/tmp/relcheck/bin/sigil --version
 /tmp/relcheck/bin/sigil --vault /tmp/relcheck-vault init
 /tmp/relcheck/bin/sigil mcp --help
 ```
@@ -41,7 +41,7 @@ python -m venv /tmp/relcheck && /tmp/relcheck/bin/pip install dist/quipu-0.3.0-p
 `python -m build` needs the `build` package; it writes `dist/quipu-0.3.0.tar.gz` and
 `dist/quipu-0.3.0-py3-none-any.whl`. The install is the point: a wheel that installs but whose
 console script cannot import itself is the failure this catches, and only running the installed
-binary finds it. `quipu --version` must print the version you just set, and `init` must make a
+binary finds it. `sigil --version` must print the version you just set, and `init` must make a
 vault that the same binary can use.
 
 ## Tag, then let CI build
@@ -58,7 +58,7 @@ section as its body. A failed matrix means no release exists yet, so fix and re-
 
 ## After the tag
 
-Bump `main` to the next development version in `pyproject.toml` and `quipu/__init__.py` (the
+Bump `main` to the next development version in `pyproject.toml` and `sigil/__init__.py` (the
 `X.Y.ZaN` form this repo uses, e.g. `0.3.1a1`), so a later install from `main` cannot claim to
 be the release — only the tagged artifact carries the number `0.3.0`.
 

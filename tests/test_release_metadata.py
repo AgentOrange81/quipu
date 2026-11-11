@@ -65,6 +65,6 @@ def test_the_release_workflow_exists_and_only_fires_on_tags():
 @pytest.mark.parametrize("path", ["README.md", "docs/RELEASING.md"])
 def test_the_docs_mention_the_current_version(path):
     text = (ROOT / path).read_text(encoding="utf-8")
-    assert _pyproject_version() in text or "quipu --version" in text, (
+    assert _pyproject_version() in text or "sigil --version" in text, (
         f"{path} neither names the current version nor tells the reader to check it"
     )
