@@ -11,6 +11,15 @@ except ModuleNotFoundError:  # Python 3.10: keep the stdlib-only promise, parse 
 
 from . import DEFAULT_PREDICATES
 
+#: Where derived state lives inside a vault. `.quipu` is what a pre-rename vault already has on disk;
+#: it is read in place and never rewritten, so upgrading a package does not move a user's data.
+META_DIR = ".sigil"
+LEGACY_META_DIR = ".quipu"
+
+#: The config file's top-level table name. A pre-rename vault heads it `[quipu]`; both parse, and new
+#: vaults are written as `[sigil]`.
+SECTION = "sigil"
+
 #: The promotion gate: an entry is promoted only when its importance clears this AND it carries
 #: evidence. The importer applies the same gate, so an imported vault tells the truth (#26).
 DEFAULT_PROMOTE_THRESHOLD = 0.5
@@ -54,7 +63,14 @@ class Config:
 
     @property
     def meta_dir(self) -> Path:
-        return self.root / ".quipu"
+        """The derived-state directory: `.sigil`, or `.quipu` for a vault written before the rename.
+
+        The name moved with the project, but a vault on disk does not get renamed by upgrading a
+        package — so the old directory is read where it is. `create`-ing a new vault makes `.sigil`;
+        nothing rewrites an existing `.quipu`, because the markdown is the truth and a rename must not
+        move a user's data as a side effect of `sigil audit`.
+        """
+        return meta_dir_for(self.root)
 
     @property
     def db_path(self) -> Path:
@@ -75,7 +91,7 @@ class Config:
         self.meta_dir.mkdir(parents=True, exist_ok=True)
         preds = ",\n  ".join(f'"{p}"' for p in self.predicates)
         self.config_path.write_text(
-            "[quipu]\n"
+            f"[{SECTION}]\n"
             f"promote_threshold = {self.promote_threshold}\n"
             f"max_promoted_tokens = {self.max_promoted_tokens}\n"
             f'predicates = [\n  {preds},\n]\n'
@@ -213,6 +229,13 @@ def _refuse_bad_llm_timeout(raw: str) -> None:
         raise ValueError(f"llm.timeout must be greater than zero, got {seconds!r}")
 
 
+def meta_dir_for(root: str | Path) -> Path:
+    """`<root>/.sigil`, or `<root>/.quipu` for a vault written before the rename (exists wins over name)."""
+    root = Path(root)
+    new = root / META_DIR
+    return new if (new.exists() or not (root / LEGACY_META_DIR).exists()) else root / LEGACY_META_DIR
+
+
 def load(root: str | Path, create: bool = False) -> Config:
     root = Path(root).expanduser().resolve()
     cfg = Config(root=root)
@@ -223,7 +246,8 @@ def load(root: str | Path, create: bool = False) -> Config:
         if raw_timeout is not None:
             _refuse_bad_llm_timeout(raw_timeout)
         data = tomllib.loads(text) if tomllib else _mini_toml(text)
-        q = data.get("quipu", {})
+        # a config written before the rename heads its section `[quipu]`; both must parse
+        q = data.get("sigil", data.get("quipu", {}))
         cfg.predicates = tuple(q.get("predicates", DEFAULT_PREDICATES))
         cfg.promote_threshold = float(q.get("promote_threshold", cfg.promote_threshold))
         cfg.max_promoted_tokens = int(q.get("max_promoted_tokens", cfg.max_promoted_tokens))

@@ -38,13 +38,13 @@ def vault(tmp_path, monkeypatch):
     ]
     for e in entries:
         write_entry(root, e)
-    index_mod.reindex(root, root / ".quipu" / "index.db")
+    index_mod.reindex(root, root / ".sigil" / "index.db")
     monkeypatch.setenv("QUIPU_VAULT", str(root))
     return root
 
 
 def ids(root, **kw):
-    return [r["created"] for r in index_mod.search(root / ".quipu" / "index.db", "alpha", **kw)]
+    return [r["created"] for r in index_mod.search(root / ".sigil" / "index.db", "alpha", **kw)]
 
 
 def test_bare_since_date_starts_at_midnight_utc(vault):

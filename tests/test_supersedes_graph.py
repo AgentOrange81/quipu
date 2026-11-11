@@ -8,7 +8,7 @@ Two properties are asserted, not one:
 
 1. the old window closes at the instant the correction was written, and the correction's own edge
    is the live one;
-2. the closure lives in the MARKDOWN. `rm .quipu/index.db` + `reindex` must reproduce the same
+2. the closure lives in the MARKDOWN. `rm .sigil/index.db` + `reindex` must reproduce the same
    graph, or the fix traded a visible bug for a silent data loss on the next rebuild.
 
 An edge the correction RESTATES is left live on purpose: `_assert_edge` is idempotent by triple, so
@@ -108,7 +108,7 @@ def test_supersede_with_restated_edge_keeps_the_belief_live(vault):
           "--importance", "0.95", "--supersedes", old,
           "--edge", "TRX40:measured_as:DOCP 3200")
 
-    rows = graph_rows(vault / ".quipu" / "index.db")
+    rows = graph_rows(vault / ".sigil" / "index.db")
     assert len(rows) == 1, rows
     assert rows[0][4] is None, f"one belief, still live: {rows}"
 
@@ -120,7 +120,7 @@ def test_the_closure_survives_rm_index_db_and_reindex(vault):
           "--importance", "0.95", "--supersedes", old,
           "--edge", "TRX40:measured_as:DOCP 3600")
 
-    db = vault / ".quipu" / "index.db"
+    db = vault / ".sigil" / "index.db"
     before = graph_rows(db)
     assert any(r[4] for r in before), f"the write path closed a window: {before}"
 

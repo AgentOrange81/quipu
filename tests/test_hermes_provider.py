@@ -190,7 +190,7 @@ def test_interface_is_complete():
 
 
 def test_vault_resolution_uses_quipu_vault_env(tmp_path, monkeypatch):
-    """QUIPU_VAULT set to a directory containing .quipu/index.db wins."""
+    """QUIPU_VAULT set to a directory containing .sigil/index.db wins."""
     vault = build_vault(tmp_path / "env-vault", [E_ALPHA])
     monkeypatch.delenv("QUIPU_VAULT", raising=False)
     monkeypatch.setenv("QUIPU_VAULT", str(vault))
@@ -361,7 +361,7 @@ def test_sync_turn_journal_appends_without_creating_entries(tmp_path, monkeypatc
     provider.shutdown()  # flush any queued writer before reading (ABC lifecycle)
 
     assert count_entries(vault) == before, "sync_turn must not create entries"
-    journals = sorted((vault / ".quipu").glob("session-*.jsonl"))
+    journals = sorted((vault / ".sigil").glob("session-*.jsonl"))
     assert len(journals) == 1
     assert journals[0].stem == f"session-{SESSION_ID}"
     lines = journals[0].read_text(encoding="utf-8").splitlines()

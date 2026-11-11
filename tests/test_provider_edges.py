@@ -33,7 +33,7 @@ def _write(provider: QuipuMemoryProvider, **args) -> dict:
 
 
 def _edges(vault: Path) -> list[tuple[str, str, str]]:
-    c = sigil.index.connect(vault / ".quipu" / "index.db")
+    c = sigil.index.connect(vault / ".sigil" / "index.db")
     try:
         return [tuple(r) for r in c.execute(
             "select src, predicate, dst from edges where valid_to is null order by src, dst").fetchall()]

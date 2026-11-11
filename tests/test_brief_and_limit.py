@@ -99,9 +99,9 @@ def test_brief_never_lands_in_the_notes_directory(vault, capsys):
     assert run_cli("--vault", root, "brief") == 0
     out = capsys.readouterr()
     path = out.out.strip().splitlines()[-1]
-    assert "/.quipu/brief/" in path, path
+    assert "/.sigil/brief/" in path, path
     assert "/notes/" not in path
-    assert (root / ".quipu" / "brief" / "vault.md").exists()
+    assert (root / ".sigil" / "brief" / "vault.md").exists()
 
 
 # --- the capture limit -------------------------------------------------------------------
