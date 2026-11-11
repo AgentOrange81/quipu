@@ -104,3 +104,29 @@ jobs:
           gh release create "${{ github.event.inputs.tag || github.ref_name }}" dist/* \
             --title "sigil ${{ github.event.inputs.tag || github.ref_name }}" \
             --notes-file notes.md
+
+  # Trusted publishing: GitHub mints a short-lived OIDC token and PyPI accepts it, so no API token is
+  # ever created, stored in a secret, or rotated. Requires a publisher registered on PyPI with these
+  # exact values — owner/repo/workflow/environment — or the upload fails with "trusted publishing
+  # exchange failed", which is a loud, harmless failure: the GitHub release still exists.
+  pypi:
+    needs: publish
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/project/sigil-memory/
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist
+      - name: refuse to publish anything but a wheel and an sdist
+        run: |
+          ls dist
+          test "$(ls dist/*.whl | wc -l)" -eq 1
+          test "$(ls dist/*.tar.gz | wc -l)" -eq 1
+      - name: publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1

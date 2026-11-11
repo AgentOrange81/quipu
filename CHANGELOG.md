@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.9.0 — 2026-11-11
+
+**The project is Sigil.** Distribution `sigil-memory`, CLI `sigil`, vault `~/sigil-vault`. `quipu` keeps
+working for one release: the `quipu` binary, `import quipu` and the `quipu` memory-provider entry point all
+still resolve, and a vault that still has `.quipu/` opens where it lies instead of looking empty.
+
+- `sigil` is the package, the binary, the MCP server and the Hermes memory provider.
+- The vault moved to `~/sigil-vault`; derived state is `.sigil/`, with `.quipu/` read in place for
+  existing vaults and never relocated.
+- The package installs as a Hermes plugin directory (`hermes memory status` → installed, available).
+- `sigil write` records `evidence_kind`, which only the MCP writer used to do.
+- The export envelope key is `meta.sigil`; it was `meta.quipu`.
+- The CLI names itself `sigil` in usage and error lines; it said `quipu`.
+
+The old name is retired at 0.10.0.
+
+
 Notable changes, newest first. Versions follow `0.x` while the format and the CLI are still moving;
 anything that changes a vault's on-disk shape gets an explicit note, because markdown is the source of
 truth and a migration is the user's data.

@@ -24,7 +24,7 @@ Install the released wheel — there is no PyPI publish step; the release workfl
 wheel and sdist to the GitHub Release:
 
 ```bash
-pip install https://github.com/AgentOrange81/quipu/releases/download/v0.3.0/quipu-0.3.0-py3-none-any.whl
+pip install https://github.com/AgentOrange81/sigil/releases/download/v0.3.0/quipu-0.3.0-py3-none-any.whl
 ```
 
 or, from a checkout, `pip install -e .`.

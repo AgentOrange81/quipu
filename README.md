@@ -9,7 +9,7 @@ memory's own lifecycle becomes labelled training data.
 ```bash
 pip install -e ".[dev]"        # or: uv sync
 # or the released wheel, without a checkout:
-#   pip install https://github.com/AgentOrange81/quipu/releases/latest/download/<wheel>
+#   pip install https://github.com/AgentOrange81/sigil/releases/latest/download/<wheel>
 #   (releases up to 0.8.0 ship as quipu-*.whl; later ones as sigil_memory-*.whl)
 sigil --version
 sigil --vault ~/memory init
