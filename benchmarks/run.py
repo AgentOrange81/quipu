@@ -32,6 +32,7 @@ from .loaders import (
     load_synthetic,
     query_set_sha256,
 )
+from .vault import index_db
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 RETRIEVER = "sigil.index.search (sqlite FTS5, bm25, unicode61+porter)"
@@ -57,7 +58,7 @@ def _index_corpus(dataset: Dataset, root: Path) -> Path:
     """Write the corpus as markdown and index it with the real index."""
     for e in dataset.entries:
         write_entry(root, e)
-    db = root / ".quipu" / "index.db"
+    db = index_db(root)
     reindex(root, db)
     return db
 
@@ -140,7 +141,7 @@ def _misses(queries: list[BenchQuery], ranked: dict[str, list[str]], max_k: int,
 
 def run(dataset: Dataset, ks: list[int]) -> tuple[dict, dict[str, list[str]]]:
     """Index the corpus in a temp vault, query it, and score the answers."""
-    with tempfile.TemporaryDirectory(prefix="quipu-bench-") as tmp:
+    with tempfile.TemporaryDirectory(prefix="sigil-bench-") as tmp:
         root = Path(tmp) / "vault"
         root.mkdir(parents=True, exist_ok=True)
         db = _index_corpus(dataset, root)
@@ -173,7 +174,7 @@ def run(dataset: Dataset, ks: list[int]) -> tuple[dict, dict[str, list[str]]]:
 
 
 def main(argv: list[str] | None = None) -> int:
-    ap = argparse.ArgumentParser(prog="benchmarks.run", description="quipu retrieval benchmark")
+    ap = argparse.ArgumentParser(prog="benchmarks.run", description="sigil retrieval benchmark")
     ap.add_argument("--dataset", required=True, choices=["synthetic", "longmemeval"])
     ap.add_argument("--k", action="append", type=int, default=None,
                     help="cut-off to score (repeatable; default 5 and 10)")

@@ -499,7 +499,7 @@ def audit_report(cfg) -> dict:
     lost = _index_fields_lost(cfg, entries)
     if lost:
         problems.append(f"{lost} entries: the index lost fields the markdown still has "
-                        f"(a client running older code rebuilt it — rerun `quipu reindex`)")
+                        f"(a client running older code rebuilt it — rerun `sigil reindex`)")
     for e in entries.values():
         if e.state == "promoted" and not e.evidence:
             problems.append(f"{e.id}: promoted without evidence")

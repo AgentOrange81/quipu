@@ -29,7 +29,7 @@ PROTOCOL_VERSION = "2025-06-18"
 
 
 def _log(msg: str) -> None:
-    print(f"quipu-mcp: {msg}", file=sys.stderr, flush=True)
+    print(f"sigil-mcp: {msg}", file=sys.stderr, flush=True)
 
 
 # --------------------------------------------------------------------------- tool implementations
@@ -245,7 +245,7 @@ def serve(vault: str | Path) -> int:
     note = index_mod.refresh_if_stale(cfg)
     if note:
         _log(note)
-    _log(f"serving {cfg.root} (quipu {__version__}, protocol {PROTOCOL_VERSION})")
+    _log(f"serving {cfg.root} (sigil {__version__}, protocol {PROTOCOL_VERSION})")
     for line in sys.stdin:
         line = line.strip()
         if not line:

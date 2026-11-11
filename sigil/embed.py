@@ -155,9 +155,9 @@ def hybrid_search(db, query: str, url: str, model: str, limit: int = 10,
     finally:
         c.close()
     if not vectors:
-        return lexical[:limit], f"no vectors for model {model!r}: run `quipu embed` to build them"
+        return lexical[:limit], f"no vectors for model {model!r}: run `sigil embed` to build them"
     if not url:
-        return lexical[:limit], "no embed_url configured: set [embed] url in .quipu/config.toml"
+        return lexical[:limit], "no embed_url configured: set [embed] url in .sigil/config.toml"
     query_vec = embed_texts(url, model, [query], transport=transport)[0]
     semantic = vector_ranking(query_vec, vectors, RRF_WINDOW)
     order = fuse([r["id"] for r in lexical], semantic)

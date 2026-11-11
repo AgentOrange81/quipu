@@ -24,7 +24,7 @@ An empty gold list is an honest statement: the vault does NOT contain an entry t
 so nothing can rank first for it. Those are curation gaps, not ranking bugs — write the entry (verified,
 with evidence) rather than tuning a weight.
 
-    cp -a ~/quipu-vault /tmp/livevault
+    cp -a ~/sigil-vault /tmp/livevault
     .venv/bin/python -m benchmarks.live_queries /tmp/livevault
     .venv/bin/python -m benchmarks.live_queries /tmp/livevault --json out.json --no-variants
 """
@@ -36,6 +36,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+from benchmarks.vault import require_index  # noqa: E402
 from sigil.index import COLUMN_WEIGHTS, _fts_query, _fts_query_or, connect, search  # noqa: E402
 
 #: (question, subject stems, hand-verified acceptable answer ids)
@@ -206,7 +207,7 @@ def main(argv=None):
         print("usage: python -m benchmarks.live_queries <vault> [--json out.json] [--no-variants]",
               file=sys.stderr)
         return 2
-    db = Path(argv[0]) / ".quipu" / "index.db"
+    db = require_index(Path(argv[0]))
     print(f"corpus: {db}\n")
     report = evaluate("SHIPPED sigil.index.search", db, shipped_row)
     variant_rows = []
@@ -230,7 +231,7 @@ def main(argv=None):
         doc = {
             "dataset": {"name": "live", "version": "v1",
                         "size": None, "queries": report["n"],
-                        "notes": "ten hand-judged questions against a copy of ~/quipu-vault; "
+                        "notes": "ten hand-judged questions against a copy of ~/sigil-vault; "
                                  "gold ids hand-verified, and an empty list means the corpus has no answer"},
             "run": _run_meta(),
             "metrics": {k: report[k] for k in ("rank1_gold", "rank1_promoted", "rank1_subject", "gold_in_5")},

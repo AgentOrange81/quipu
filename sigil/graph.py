@@ -292,7 +292,7 @@ def _require_carrier(cfg: Config, note_id: str, verb: str) -> Path | None:
         return path
     raise ValueError(
         f"{verb}: carrier {note_id!r} names no entry; pass the entry id of the note that asserts "
-        f"this edge (the 8-hex id of an existing entry), or run `quipu repair --edges` to re-home "
+        f"this edge (the 8-hex id of an existing entry), or run `sigil repair --edges` to re-home "
         f"the edges the index holds but the markdown does not record"
     )
 

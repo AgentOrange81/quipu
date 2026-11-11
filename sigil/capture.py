@@ -48,7 +48,7 @@ from . import promote as promote_mod
 
 HERMES_PROFILES = Path.home() / ".hermes" / "profiles"
 DEFAULT_VAULT = Path.home() / "sigil-vault"
-LOG_PATH = Path.home() / "admin" / "logs" / "quipu-capture.log"
+LOG_PATH = Path.home() / "admin" / "logs" / "sigil-capture.log"
 STATE_DIR = Path.home() / ".local" / "state" / "sigil-capture"
 CRON_PREFIX = "[IMPORTANT: You are running as a scheduled cron job"
 
@@ -280,7 +280,7 @@ def reflect(item: dict, max_chars: int, timeout: float) -> tuple[int, str]:
 
 
 def main(argv=None) -> int:
-    ap = argparse.ArgumentParser(prog="quipu-capture", description=(__doc__ or "").splitlines()[0])
+    ap = argparse.ArgumentParser(prog="sigil-capture", description=(__doc__ or "").splitlines()[0])
     ap.add_argument("--limit", type=int, default=0, help="max sessions per run (0 = budget-bound)")
     ap.add_argument("--budget-min", type=float, default=0,
                     help="keep going until this many minutes elapse (0 = one batch of --limit)")
@@ -351,7 +351,7 @@ def main(argv=None) -> int:
     try:
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
     except OSError:
-        print("another quipu-capture run holds the lock — nothing attempted")
+        print("another sigil-capture run holds the lock — nothing attempted")
         return 0
 
     # A single 3-session batch per timer tick worked out at ~28 s of work per 20 minutes of wall clock,

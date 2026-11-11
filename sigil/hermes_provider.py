@@ -1,10 +1,11 @@
-"""Quipu as a Hermes memory provider — ``memory.provider: quipu``.
+"""Sigil as a Hermes memory provider — ``memory.provider: sigil`` (the legacy ``quipu`` name still
+resolves for one release).
 
 The manager drives this class per agent instance (multiplexing contract, ``MemoryProvider``):
 every store, path and thread is bound from ``initialize()`` and kept on the instance — no
-module-level state. Recall goes straight to the quipu SQLite FTS index (no LLM, no network);
+module-level state. Recall goes straight to the sigil SQLite FTS index (no LLM, no network);
 turn sync is an append-only JSONL per session, never a vault entry per turn — that per-turn
-failure is exactly what quipu exists to prevent.
+failure is exactly what sigil exists to prevent.
 """
 from __future__ import annotations
 
@@ -19,7 +20,7 @@ import time
 from pathlib import Path
 from typing import Any
 
-try:  # hermes runtime; quipu used standalone falls back so the package imports anywhere
+try:  # hermes runtime; sigil used standalone falls back so the package imports anywhere
     from agent.memory_provider import MemoryProvider, spawn_context_thread
 except Exception:  # pragma: no cover - exercised only outside hermes
 
@@ -36,6 +37,10 @@ _CHAR_PER_TOKEN = 4      # rough budget for the ≤400-token recall cap
 _DEFAULT_LIMIT = 5
 _DEFAULT_MAX_TOKENS = 400
 _MIN_QUERY_CHARS = 4
+
+#: The pre-rename provider name. The `quipu` entry point still resolves for one release, so a
+#: provider loaded under it keeps calling itself quipu; the product name everywhere else is sigil.
+LEGACY_NAME = "quipu"
 _TURN_CAPTURE_CHARS = 4000
 _JOIN_TIMEOUT = 5.0
 
@@ -110,9 +115,16 @@ def _str_prop(description: str) -> dict[str, Any]:
     return {"type": "string", "description": description}
 
 
+def _schema_for(schema: dict[str, Any], provider_name: str) -> dict[str, Any]:
+    """The same tool under the provider's own name: the tools follow the registration."""
+    out = dict(schema)
+    out["name"] = schema["name"].replace(f"{LEGACY_NAME}_", f"{provider_name}_", 1)
+    return out
+
+
 SEARCH_SCHEMA = _schema(
     "quipu_search",
-    "Search the quipu memory vault for prior outcomes, decisions and measurements. "
+    "Search the sigil memory vault for prior outcomes, decisions and measurements. "
     "Use before answering anything project-history shaped.",
     {"query": _str_prop("What to look for (keywords, not sentences)."),
      "limit": {"type": "integer", "description": "Maximum results (default 5)."}},
@@ -121,7 +133,7 @@ SEARCH_SCHEMA = _schema(
 
 WRITE_SCHEMA = _schema(
     "quipu_write",
-    "Record one real outcome in the quipu vault: a decision with its reason, a measurement, or a "
+    "Record one real outcome in the sigil vault: a decision with its reason, a measurement, or a "
     "root cause. summary is the retrieval handle; evidence is how a skeptic re-checks it.",
     {"summary": _str_prop("One-sentence statement of the fact."),
      "evidence": _str_prop("Numbers, paths or commands a skeptic could re-run."),
@@ -149,11 +161,17 @@ WRITE_SCHEMA = _schema(
 
 
 class QuipuMemoryProvider(MemoryProvider):
-    """MemoryProvider backed by a local quipu vault (index recall + JSONL turn capture)."""
+    """MemoryProvider backed by a local sigil vault (index recall + JSONL turn capture).
 
-    def __init__(self, config: dict[str, Any] | None = None):
+    The instance takes the name it was REGISTERED under, so the identity the provider reports is
+    the one Hermes selected it by: `sigil` for the product, `quipu` for the legacy entry point that
+    survives one release.
+    """
+
+    def __init__(self, config: dict[str, Any] | None = None, name: str = LEGACY_NAME):
         cfg = dict(config) if config is not None else _load_plugin_config()
         self._config = cfg
+        self._name = name or LEGACY_NAME
         self._limit = int(cfg.get("limit") or os.environ.get("QUIPU_PREFETCH_LIMIT") or _DEFAULT_LIMIT)
         self._max_tokens = int(cfg.get("max_tokens") or os.environ.get("QUIPU_PREFETCH_MAX_TOKENS")
                                or _DEFAULT_MAX_TOKENS)
@@ -171,10 +189,18 @@ class QuipuMemoryProvider(MemoryProvider):
 
     @property
     def name(self) -> str:
-        return "quipu"
+        return self._name
+
+    @property
+    def _search_tool(self) -> str:
+        return f"{self._name}_search"
+
+    @property
+    def _write_tool(self) -> str:
+        return f"{self._name}_write"
 
     def is_available(self) -> bool:
-        """A vault directory exists and quipu/index.py imports; config/deps only, no network."""
+        """A vault directory exists and sigil/index.py imports; config/deps only, no network."""
         if _load_submodule("index") is None:
             return False
         return _resolve_vault(self._hermes_home) is not None
@@ -182,8 +208,8 @@ class QuipuMemoryProvider(MemoryProvider):
     def unavailable_reason(self) -> str:
         looked = ", ".join(str(c) for c in _candidates(self._hermes_home))
         if _load_submodule("index") is None:
-            return f"quipu: quipu/index.py does not import (looked for a vault at: {looked})"
-        return f"quipu: no vault directory found (looked for: {looked})"
+            return f"{self._name}: sigil/index.py does not import (looked for a vault at: {looked})"
+        return f"{self._name}: no vault directory found (looked for: {looked})"
 
     def initialize(self, session_id: str, **kwargs) -> None:
         """Bind vault + session on the instance; open nothing long-lived."""
@@ -193,7 +219,8 @@ class QuipuMemoryProvider(MemoryProvider):
         self._vault = str(vault) if vault else ""
         self._stats_line = ""
         if self._vault:
-            self._writer_thread = threading.Thread(target=self._writer_loop, name="quipu-sync", daemon=True)
+            self._writer_thread = threading.Thread(target=self._writer_loop,
+                                                   name=f"{self._name}-sync", daemon=True)
             self._writer_thread.start()
 
     def shutdown(self) -> None:
@@ -215,9 +242,9 @@ class QuipuMemoryProvider(MemoryProvider):
             return ""
         if not self._stats_line:
             self._stats_line = self._compute_stats_line()
-        return (f"# Quipu memory\nVault: {self._vault}{self._stats_line}\n"
+        return (f"# Sigil memory\nVault: {self._vault}{self._stats_line}\n"
                 "Recall before answering; write after a real outcome, never per turn. "
-                "Search with quipu_search, record outcomes with quipu_write.")
+                f"Search with {self._search_tool}, record outcomes with {self._write_tool}.")
 
     def _compute_stats_line(self) -> str:
         index_mod = _load_submodule("index")
@@ -226,7 +253,7 @@ class QuipuMemoryProvider(MemoryProvider):
         try:
             stats = index_mod.stats(_db_path(self._vault))
         except Exception as exc:
-            logger.debug("quipu stats unavailable: %s", exc)
+            logger.debug("sigil stats unavailable: %s", exc)
             return ""
         promoted = stats.get("by_state", {}).get("promoted", 0)
         return f" ({stats.get('entries', 0)} entries, {promoted} promoted)"
@@ -240,11 +267,11 @@ class QuipuMemoryProvider(MemoryProvider):
         try:
             rows = index_mod.search(_db_path(self._vault), query, limit=self._limit)
         except Exception as exc:
-            logger.warning("quipu prefetch search failed: %s", exc)
+            logger.warning("sigil prefetch search failed: %s", exc)
             return ""
         if not rows:
             return ""
-        lines = ["## Quipu recall"]
+        lines = ["## Sigil recall"]
         for row in rows:
             lines.append(f"- [{row.get('id')}] {row.get('summary')} "
                          f"({row.get('state')}, score {row.get('score', 0.0)})")
@@ -270,7 +297,7 @@ class QuipuMemoryProvider(MemoryProvider):
                 return pending["result"]
             return self._recall(query, max_tokens)
         except Exception as exc:
-            logger.warning("quipu prefetch failed: %s", exc)
+            logger.warning("sigil prefetch failed: %s", exc)
             return ""
 
     def queue_prefetch(self, query: str, *, session_id: str = "") -> None:
@@ -281,14 +308,14 @@ class QuipuMemoryProvider(MemoryProvider):
             try:
                 result = self._recall(query)
             except Exception as exc:
-                logger.debug("quipu background prefetch failed: %s", exc)
+                logger.debug("sigil background prefetch failed: %s", exc)
             with self._lock:
                 self._pending = {"query": query, "result": result}
 
         try:
-            self._prefetch_thread = _spawn_thread(work, name="quipu-prefetch")
+            self._prefetch_thread = _spawn_thread(work, name=f"{self._name}-prefetch")
         except Exception as exc:
-            logger.debug("quipu queue_prefetch dropped: %s", exc)
+            logger.debug("sigil queue_prefetch dropped: %s", exc)
 
     # -- turn sync -----------------------------------------------------------
 
@@ -307,7 +334,7 @@ class QuipuMemoryProvider(MemoryProvider):
                 "assistant": (assistant_content or "")[:_TURN_CAPTURE_CHARS],
             }))
         except Exception as exc:
-            logger.debug("quipu sync_turn dropped: %s", exc)
+            logger.debug("sigil sync_turn dropped: %s", exc)
 
     def _writer_loop(self) -> None:
         while True:
@@ -321,31 +348,32 @@ class QuipuMemoryProvider(MemoryProvider):
                 with path.open("a", encoding="utf-8") as fh:
                     fh.write(json.dumps(record, ensure_ascii=False) + "\n")
             except Exception as exc:
-                logger.debug("quipu sync append failed: %s", exc)
+                logger.debug("sigil sync append failed: %s", exc)
 
     # -- tools ---------------------------------------------------------------
 
     def get_tool_schemas(self) -> list[dict[str, Any]]:
-        return [SEARCH_SCHEMA, WRITE_SCHEMA]
+        return [_schema_for(SEARCH_SCHEMA, self._name), _schema_for(WRITE_SCHEMA, self._name)]
 
     def handle_tool_call(self, tool_name: str, args: dict[str, Any], **kwargs) -> str:
         try:
             return self._handle_tool(tool_name, dict(args or {}))
         except Exception as exc:
-            logger.warning("quipu tool %s failed: %s", tool_name, exc)
-            return json.dumps({"error": f"quipu {tool_name} failed: {exc}"})
+            logger.warning("sigil tool %s failed: %s", tool_name, exc)
+            return json.dumps({"error": f"{self._name} {tool_name} failed: {exc}"})
 
     def _handle_tool(self, tool_name: str, args: dict[str, Any]) -> str:
-        if tool_name == "quipu_search":
+        if tool_name in (self._search_tool, f"{LEGACY_NAME}_search"):
             return self._tool_search(args)
-        if tool_name == "quipu_write":
+        if tool_name in (self._write_tool, f"{LEGACY_NAME}_write"):
             return self._tool_write(args)
-        return json.dumps({"error": f"quipu provider handles quipu_search/quipu_write, not {tool_name!r}"})
+        return json.dumps({"error": f"{self._name} provider handles {self._search_tool}/"
+                                      f"{self._write_tool}, not {tool_name!r}"})
 
     def _tool_search(self, args: dict[str, Any]) -> str:
         index_mod = _load_submodule("index")
         if index_mod is None or not self._vault:
-            return json.dumps({"results": [], "error": "quipu vault not available"})
+            return json.dumps({"results": [], "error": "sigil vault not available"})
         query = str(args.get("query") or "").strip()
         if not query:
             return json.dumps({"error": "query is required"})
@@ -362,7 +390,7 @@ class QuipuMemoryProvider(MemoryProvider):
         config_mod = _load_submodule("config")
         mcp_mod = _load_submodule("mcp")
         if config_mod is None or mcp_mod is None or not self._vault:
-            return json.dumps({"error": "quipu vault not available"})
+            return json.dumps({"error": "sigil vault not available"})
         if not str(args.get("summary") or "").strip():
             return json.dumps({"error": "summary is required"})
         if not str(args.get("evidence") or "").strip():
@@ -416,5 +444,11 @@ def _spawn_thread(target, *, name: str) -> threading.Thread:
 
 
 def register(ctx) -> None:
-    """Entry point for the ``hermes_agent.memory_providers`` group."""
-    ctx.register_memory_provider(QuipuMemoryProvider())
+    """Entry point for the ``hermes_agent.memory_providers`` group.
+
+    The provider takes the name it was REGISTERED under: Hermes resolves a provider by entry-point
+    name and hands that name to the plugin context, so `memory.provider: sigil` yields a provider
+    that calls itself sigil, while the legacy `quipu` entry point keeps its name for one release.
+    """
+    name = getattr(ctx, "name", "") or LEGACY_NAME
+    ctx.register_memory_provider(QuipuMemoryProvider(name=name))

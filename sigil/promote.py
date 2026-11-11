@@ -366,7 +366,7 @@ class HttpProvider:
                 raise RuntimeError(
                     f"LLM request failed: {url}: no response within {self.timeout}s. One chunk is one "
                     f"request, so a large chunk needs a longer budget: raise `--endpoint-timeout` (or "
-                    f"`[llm] timeout` in .quipu/config.toml), lower `--max-chars`, or point "
+                    f"`[llm] timeout` in .sigil/config.toml), lower `--max-chars`, or point "
                     f"`[llm] base_url` at a faster endpoint") from exc
             raise RuntimeError(f"LLM request failed: {url}: {type(exc).__name__}: {exc}") from exc
         try:
