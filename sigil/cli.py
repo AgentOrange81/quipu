@@ -1,4 +1,4 @@
-"""quipu command line."""
+"""sigil command line."""
 from __future__ import annotations
 
 import argparse
@@ -488,7 +488,7 @@ def cmd_audit(args) -> int:
 def audit_report(cfg) -> dict:
     """The audit's findings as a dict, so callers other than the CLI can act on them.
 
-    `quipu-capture` asks this on every timer tick and reindexes when the answer says the derived copy
+    `sigil-capture` asks this on every timer tick and reindexes when the answer says the derived copy
     lost fields (#128) — the same question the CLI prints, without spawning the CLI to print it.
     """
     entries = {e.id: e for _p, e in iter_entries(cfg.root)}
@@ -612,7 +612,7 @@ def _repair_edges(cfg, args) -> int:
 
     Reported by edge id, spec and the entry that will carry it; an edge with no entry to carry it is
     reported and counted, never dropped and never given a guessed carrier. Exits non-zero while any
-    remain, the same contract `quipu repair` already makes for a summary it cannot recover.
+    remain, the same contract `sigil repair` already makes for a summary it cannot recover.
     """
     result = repair_mod.find_edges(cfg.root)
     if not result.edges:
@@ -682,7 +682,7 @@ def cmd_embed(args) -> int:
     cfg = _cfg(args)
     url = args.embed_url or cfg.embed_url
     if not url:
-        print("no embedding endpoint: pass --url or set [embed] url in .quipu/config.toml",
+        print("no embedding endpoint: pass --url or set [embed] url in .sigil/config.toml",
               file=sys.stderr)
         return 2
     model = args.embed_model or cfg.embed_model
@@ -760,7 +760,7 @@ def cmd_mcp(args) -> int:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(prog="quipu", description="local-first agent memory")
+    p = argparse.ArgumentParser(prog="sigil", description="local-first agent memory")
     p.add_argument("--vault", default=".", help="vault root (default: cwd)")
     p.add_argument("--version", action="version", version=f"sigil {__version__}")
     sub = p.add_subparsers(dest="cmd", required=True)
@@ -900,7 +900,7 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--agent", default="")
     s.add_argument("--limit", type=int, default=brief_mod.DEFAULT_LIMIT,
                    help=f"max entries (default {brief_mod.DEFAULT_LIMIT}, 0 = all)")
-    s.add_argument("--out", default="", help="path relative to .quipu/ (default .quipu/brief/<scope>.md)")
+    s.add_argument("--out", default="", help="path relative to .sigil/ (default .sigil/brief/<scope>.md)")
     s.add_argument("--stdout", action="store_true", help="print instead of writing")
 
     s = add("embed", "build or refresh the vector index (needs an embeddings endpoint)", cmd_embed)

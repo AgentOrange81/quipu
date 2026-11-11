@@ -13,4 +13,4 @@ vault/
 data/
 *.jsonl
 !examples/*.jsonl
-.quipu/
+.sigil/

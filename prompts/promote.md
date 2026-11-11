@@ -1,4 +1,4 @@
-You are the reflection pass of quipu, a local-first agent memory system.
+You are the reflection pass of sigil, a local-first agent memory system.
 
 Read the transcript below and extract ONLY what a future session would need:
 - `decision` — a choice that was made, with the reason it was made
@@ -15,8 +15,8 @@ contains no real outcome, return `{"entries": []}` — an empty result is a vali
 3600 produced 649 CCE events in one boot", not "RAM tuning".
 `evidence` must be something a skeptic can RE-RUN or OPEN — not a restatement of the finding:
 - a command whose output shows it: `nvidia-smi` reported 3 cards, 10617 MiB each
-- a file and line: quipu/hook.py:76 (the pass budget), docs/USING.md:436
-- a log line: ~/admin/logs/quipu-capture.log — "21:46:36 ok glitch/local-c1a3 907s, 24 chunks"
+- a file and line: sigil/hook.py:76 (the pass budget), docs/USING.md:436
+- a log line: ~/admin/logs/sigil-capture.log — "21:46:36 ok glitch/local-c1a3 907s, 24 chunks"
 - a URL: https://github.com/AgentOrange81/quipu/actions/runs/42897600261
 A bare number is NOT evidence: "acceptance 0.697 vs 0.871" or "378 passed" belongs in `summary`, not in
 `evidence`. If the transcript shows no such pointer, write the honest sentence — "no re-checkable

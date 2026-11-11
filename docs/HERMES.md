@@ -45,11 +45,11 @@ The provider binds its vault from `initialize()`, taking the first of these that
 directory:
 
 1. `$QUIPU_VAULT` — an explicit path wins over everything else.
-2. `<hermes_home>/quipu-vault` — the profile-scoped vault, e.g.
-   `~/.hermes/profiles/glitch/quipu-vault`.
-3. `~/quipu-vault` — the shared vault.
+2. `<hermes_home>/sigil-vault` — the profile-scoped vault, e.g.
+   `~/.hermes/profiles/glitch/sigil-vault`.
+3. `~/sigil-vault` — the shared vault.
 
-So if your vault is not `~/quipu-vault` and you do not want it under the profile, set
+So if your vault is not `~/sigil-vault` and you do not want it under the profile, set
 `QUIPU_VAULT` in the profile's environment:
 
 ```bash
@@ -85,7 +85,7 @@ network unplugged.
 `prefetch()` reads. `sync_turn()` writes to exactly one place:
 
 ```
-<vault>/.quipu/session-<session-id>.jsonl
+<vault>/.sigil/session-<session-id>.jsonl
 ```
 
 One JSON line per turn, with the timestamp, the session id and the user and assistant text (each
@@ -94,7 +94,7 @@ created per turn** — the entry count does not move when a session runs, and th
 fill with `session: "fixed a bug"` rows. This is the append-only failure quipu exists to fix,
 and the provider refuses to commit it.
 
-Entries come from a promotion pass instead: `quipu reflect` over a transcript, or `quipu hook` at
+Entries come from a promotion pass instead: `sigil reflect` over a transcript, or `sigil hook` at
 a session end. The gate is the same one the CLI applies — importance over the threshold **and**
 evidence present — and a summary that is a topic rather than a statement does not clear it. See
 [USING.md](USING.md) for the gate and the reflection pass.
@@ -103,10 +103,10 @@ The provider adds two tools for an agent that wants to reach further than the re
 
 | tool | what it takes | what it does |
 |---|---|---|
-| `quipu_search` | `query`, optional `limit` (default 5) | BM25 search over the vault index; returns id, summary, state, score |
-| `quipu_write` | `summary` and `evidence` (both required), optional `ask`, `kind` (default `fact`), `project`, `agent`, `importance`, `state`, `edges`, `supersedes` | writes one entry into the vault, reindexes it, and returns the `state` it actually wrote |
+| `sigil_search` | `query`, optional `limit` (default 5) | BM25 search over the vault index; returns id, summary, state, score |
+| `sigil_write` | `summary` and `evidence` (both required), optional `ask`, `kind` (default `fact`), `project`, `agent`, `importance`, `state`, `edges`, `supersedes` | writes one entry into the vault, reindexes it, and returns the `state` it actually wrote |
 
-Call `quipu_write` after a real outcome — a decision with its reason, a measurement, a root cause
+Call `sigil_write` after a real outcome — a decision with its reason, a measurement, a root cause
 — and not per turn. The summary is the retrieval handle, so write it as a statement; the evidence
 is what a skeptic would re-run.
 
@@ -129,7 +129,7 @@ Turn the provider on, ask the agent something the vault already knows, and look 
 The vault side, from any shell:
 
 ```bash
-quipu --vault ~/quipu-vault stats
+sigil --vault ~/sigil-vault stats
 ```
 
 That prints the corpus report as JSON — `entries`, `promoted`, `promotion_rate` and the export
@@ -138,7 +138,7 @@ counts. A vault the provider can search has a non-zero `entries`.
 The session side, in the vault:
 
 ```bash
-ls ~/quipu-vault/.quipu/session-*.jsonl
+ls ~/sigil-vault/.sigil/session-*.jsonl
 ```
 
 One file per session id, one JSON line per turn. It proves the provider is capturing turns. It
@@ -159,10 +159,10 @@ imports but was installed elsewhere is invisible.
 
 **No vault found.** The provider says so instead of starting blind: `quipu: no vault directory
 found (looked for: ...)`, naming the paths it tried, in order. Create the vault with
-`quipu --vault <path> init`, or point `QUIPU_VAULT` at an existing one.
+`sigil --vault <path> init`, or point `QUIPU_VAULT` at an existing one.
 
 **An empty vault.** Not an error: recall returns nothing and the agent has no prior context.
-`quipu stats` reports `entries: 0`.
+`sigil stats` reports `entries: 0`.
 
 **`QUIPU_VAULT` pointing somewhere else.** The provider takes the first candidate that is a
 directory, and `QUIPU_VAULT` is first — so an exported path silently wins over the profile vault.
@@ -173,8 +173,8 @@ recall returns an empty string, the write tools return a JSON `error`, and turn 
 dropped with a debug log. A session with a broken vault degrades to no recall; it does not die.
 
 **A stale index.** The index is derived from the markdown. If entries were written outside the
-provider (`quipu write`, a file edit), reindex before blaming the provider:
-`quipu --vault ~/quipu-vault reindex`.
+provider (`sigil write`, a file edit), reindex before blaming the provider:
+`sigil --vault ~/sigil-vault reindex`.
 
 ## See also
 

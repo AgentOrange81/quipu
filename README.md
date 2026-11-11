@@ -1,35 +1,36 @@
-# quipu
+# sigil
 
 **Local-first agent memory that knows what it changed its mind about.**
 
-A quipu is an Inca record: knotted cords where the knots *are* the data. This one keeps your agent's
-memory as plain markdown, adds a temporal knowledge graph on top, and — the part nothing else ships —
-turns the memory's own lifecycle into labelled training data.
+A sigil is a mark that binds intent. This one binds your agent's memory to plain markdown: the notes are
+the truth, the index and the graph are derived and disposable, and — the part nothing else ships — the
+memory's own lifecycle becomes labelled training data.
 
 ```bash
 pip install -e ".[dev]"        # or: uv sync
 # or the released wheel, without a checkout:
-#   pip install https://github.com/AgentOrange81/quipu/releases/download/v0.3.0/quipu-0.3.0-py3-none-any.whl
-quipu --version
-quipu --vault ~/memory init
-quipu --vault ~/memory capture "the 3600 DOCP config threw 649 CCEs in one boot" --project wraith
-quipu --vault ~/memory write --kind decision --state promoted \
+#   pip install https://github.com/AgentOrange81/quipu/releases/latest/download/<wheel>
+#   (releases up to 0.8.0 ship as quipu-*.whl; later ones as sigil_memory-*.whl)
+sigil --version
+sigil --vault ~/memory init
+sigil --vault ~/memory capture "the 3600 DOCP config threw 649 CCEs in one boot" --project wraith
+sigil --vault ~/memory write --kind decision --state promoted \
   --summary "DOCP 3200 with FCLK 1600 is stable on the TRX40" \
   --evidence "649 MC25_STATUS CECC events in boot -1; 0 since" \
   --ask "why did the box reboot at 03:02?" --project wraith
-quipu --vault ~/memory search DOCP --project wraith
-quipu --vault ~/memory export sft --out data/sft.jsonl     # supervised examples
-quipu --vault ~/memory export dpo --out data/dpo.jsonl     # preference pairs
+sigil --vault ~/memory search DOCP --project wraith
+sigil --vault ~/memory export sft --out data/sft.jsonl     # supervised examples
+sigil --vault ~/memory export dpo --out data/dpo.jsonl     # preference pairs
 ```
 
 `--vault` is a global flag: it goes **before** the subcommand. It defaults to the working
 directory, so inside a vault you can leave it out entirely.
 
-`quipu reflect <transcript>` is the other way in, and it is the only one that needs a model: it posts
-the transcript to the OpenAI-compatible endpoint in `.quipu/config.toml` (`[llm] base_url`, default
+`sigil reflect <transcript>` is the other way in, and it is the only one that needs a model: it posts
+the transcript to the OpenAI-compatible endpoint in `.sigil/config.toml` (`[llm] base_url`, default
 `http://127.0.0.1:8080/v1`). With no endpoint reachable it fails loudly with
 `RuntimeError: LLM request failed: <urlopen error [Errno 111] Connection refused>`; use
-`quipu reflect <transcript> --fake <file.json>` to supply the proposals yourself and skip the
+`sigil reflect <transcript> --fake <file.json>` to supply the proposals yourself and skip the
 network entirely.
 
 No model or network is needed to see the whole lifecycle — capture, reflect, promote, correct,
@@ -40,7 +41,7 @@ bash examples/demo.sh
 ```
 
 That script builds a throwaway vault, runs a reflection pass against a canned response
-(`quipu reflect <transcript> --fake <file.json>`), writes a correction with `--supersedes`, and
+(`sigil reflect <transcript> --fake <file.json>`), writes a correction with `--supersedes`, and
 exports both datasets.
 **After the quickstart, read [docs/USING.md](docs/USING.md)** — it is the day-to-day guide: the
 recall-first habit, what makes an entry worth promoting, how to correct one, and what to do when
@@ -58,9 +59,9 @@ Three things go wrong in every "agent memory" I have run in anger:
 3. **It exports a pile, not a dataset.** A flat dump of entries is not fine-tuning data: no prompts,
    no negatives, no provenance, no way to rebuild the dataset from the corpus.
 
-quipu is built around the inverse of each:
+sigil is built around the inverse of each:
 
-| Problem | quipu |
+| Problem | sigil |
 |---|---|
 | append-only noise | **capture → reflect → promote** ladder; raw captures are cheap and stay raw until a gated reflection pass promotes them |
 | memory that silently goes stale | **temporal edges** (`valid_from` / `valid_to`); contradiction is an operation, not an edit. History survives |
@@ -78,13 +79,13 @@ capture ──(reflect)──► proposal ──(gate: importance ≥ 0.5 AND ev
                                                                                 └─► DPO pair: stale ≺ corrected
 ```
 
-`quipu export dpo` emits exactly that:
+`sigil export dpo` emits exactly that:
 
 ```json
 {"prompt": "can I run DOCP 3600 on the TRX40 after the BIOS flash?",
  "chosen": "DOCP 3600 with FCLK 1800 is stable after BIOS 2601 — 3 boots, zero MCEs.\n\nEvidence: 3 consecutive boots, journalctl -k per boot: 0 MCE lines each",
  "rejected": "DOCP was dropped from 3600 to 3200 with FCLK 1600 to resolve instability.\n\nEvidence: 649 CCEs in boot -1",
- "meta": {"quipu": {"entry": "…", "kind": "decision", "state": "promoted"},
+ "meta": {"sigil": {"entry": "…", "kind": "decision", "state": "promoted"},
           "superseded": {"entry": "…", "kind": "decision", "state": "promoted"},
           "reason": "3 consecutive boots, journalctl -k per boot: 0 MCE lines each"}}
 ```
@@ -97,8 +98,8 @@ entry corrects another, so `export dpo` on a fresh vault returns zero pairs.
 ## Design rules
 
 - **Markdown is the source of truth.** The vault is an Obsidian folder. SQLite is a disposable index
-  (`quipu reindex` rebuilds it in milliseconds); delete the db and you lose nothing.
-- **Evidence or it did not happen.** A promoted entry without evidence is a bug, and `quipu audit` says so.
+  (`sigil reindex` rebuilds it in milliseconds); delete the db and you lose nothing.
+- **Evidence or it did not happen.** A promoted entry without evidence is a bug, and `sigil audit` says so.
 - **Closed predicate vocabulary.** An open predicate space becomes 400 spellings of "uses". New
   predicates go in the config, deliberately.
 - **One entity, one spelling.** Names are canonicalised on write; the spelling seen becomes an alias.
@@ -112,19 +113,19 @@ entry corrects another, so `export dpo` on a fresh vault returns zero pairs.
 
 | command | what it does |
 |---|---|
-| `quipu init` | create a vault |
-| `quipu capture` | store a raw capture (cheap, unfiltered) |
-| `quipu reflect <transcript>` | one reflection pass → proposals → gated writes |
-| `quipu write` | write a curated entry directly (with `--supersedes`) |
-| `quipu import fabric <dir>` | import an Icarus/fabric corpus into the vault (top-level `*.md` only — #17) |
-| `quipu search` | BM25 over entries, filterable by kind/state/agent/project |
-| `quipu show` | print an entry |
-| `quipu edge` / `invalidate` / `contradict` | assert and retract graph edges |
-| `quipu timeline <entity> [--at ISO]` | what was true, and when |
-| `quipu neighbors <entity> --depth 2` | graph neighbourhood |
-| `quipu export sft\|dpo\|graph` | write a dataset |
-| `quipu audit` | find corpus problems (promoted-without-evidence, dangling supersedes) |
-| `quipu stats` | promotion rate, graph size, dataset counts |
+| `sigil init` | create a vault |
+| `sigil capture` | store a raw capture (cheap, unfiltered) |
+| `sigil reflect <transcript>` | one reflection pass → proposals → gated writes |
+| `sigil write` | write a curated entry directly (with `--supersedes`) |
+| `sigil import fabric <dir>` | import an Icarus/fabric corpus into the vault (top-level `*.md` only — #17) |
+| `sigil search` | BM25 over entries, filterable by kind/state/agent/project |
+| `sigil show` | print an entry |
+| `sigil edge` / `invalidate` / `contradict` | assert and retract graph edges |
+| `sigil timeline <entity> [--at ISO]` | what was true, and when |
+| `sigil neighbors <entity> --depth 2` | graph neighbourhood |
+| `sigil export sft\|dpo\|graph` | write a dataset |
+| `sigil audit` | find corpus problems (promoted-without-evidence, dangling supersedes) |
+| `sigil stats` | promotion rate, graph size, dataset counts |
 
 The importer maps a fabric entry's `type` to a `kind`, its `training_value` to a `state`
 (`low` arrives as `pruned`, never as promoted), and joins `outcome` and `evidence` into one
@@ -136,10 +137,9 @@ subdirectories are not walked, and the importer does not yet report why a file w
 
 - Not a vector database. Retrieval is BM25 (SQLite FTS5) today; hybrid scoring + embeddings is
   planned, not in `main` (#5).
-- Not an MCP server. `quipu mcp` would expose `search`/`write`/`timeline`/`neighbors` over stdio
-  MCP; it is planned, not in `main` (#9).
-- Not a Hermes memory provider. The packaged `quipu.hermes_provider` entry point — automatic
-  pre-turn recall, per-turn buffering, an always-loaded digest — is planned, not in `main` (#10).
+- It **is** an MCP server: `sigil mcp` serves `search`/`write`/`timeline`/`neighbors`/`stats` over stdio.
+- It **is** a Hermes memory provider: the package installs as a plugin directory (`hermes memory status`
+  shows `installed ✓ / available ✓`) and adds pre-turn recall, per-turn buffering and a digest.
 - Not a hosted service. Two processes maximum: you and the LLM you point it at.
 - Not a finished product. It is a working v0.1 with tests, built to be developed in the open.
 

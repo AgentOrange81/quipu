@@ -2,7 +2,7 @@
 
 The package still has zero runtime dependencies: this module talks to any OpenAI-compatible
 `/v1/embeddings` endpoint with `urllib` and stores the vectors in the SQLite index. There is no model
-inside quipu, no torch, no numpy — point `embed_url` at llama.cpp (`llama-server --embeddings`), at
+inside sigil, no torch, no numpy — point `embed_url` at llama.cpp (`llama-server --embeddings`), at
 ollama, or at anything else that speaks the shape.
 
 Why fused rather than vector-only, measured on the synthetic harness (100 queries, 200 notes,
@@ -17,7 +17,7 @@ Vector-only has the best headline number and gives up exact-phrase retrieval (1.
 query is the one shape where lexical matching is simply right). Reciprocal rank fusion at 0.8 keeps
 phrase at 1.00 and costs 0.01 R@5 against vector-only, which is the trade this module takes.
 
-Vectors are DERIVED data, like the FTS index: they live in `.quipu/index.db` and are rebuilt with
+Vectors are DERIVED data, like the FTS index: they live in `.sigil/index.db` and are rebuilt with
 `quipu embed`. Losing the index costs a re-embed, never a memory. When no vectors are present,
 `search --hybrid` degrades to the lexical ranking instead of failing.
 """

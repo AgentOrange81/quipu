@@ -9,7 +9,7 @@ Recall before you answer. If a question touches project history — what was dec
 tried and failed — search the vault *before* answering from your own context:
 
 ```bash
-quipu search "DOCP" --project wraith --limit 3
+sigil search "DOCP" --project wraith --limit 3
 ```
 
 ```
@@ -21,7 +21,7 @@ quipu search "DOCP" --project wraith --limit 3
 
 BM25 over the entries, filterable with `--kind`, `--state`, `--agent`, `--project`. No match prints
 `no matches` and exits 1. For a question about a specific thing, ask the graph too —
-`quipu timeline trx40` shows every edge with its validity window, so you see what changed and when:
+`sigil timeline trx40` shows every edge with its validity window, so you see what changed and when:
 
 ```
    1 2026-10-28T22:06:49 → 2026-10-28T22:07:06  trx40 -measured_as-> docp-3200
@@ -35,14 +35,14 @@ Search finds what was written; the timeline shows what changed.
 
 | command | what it is | when to use it |
 |---|---|---|
-| `quipu capture` | a raw capture: verbatim, unfiltered, `state=raw` | anything you might need later and have not judged yet — cheap, and it may never be promoted |
-| `quipu write` | a curated entry you already trust, written directly | you know the fact and the evidence now, and want no model in the loop |
-| `quipu reflect <transcript>` | a model reads a transcript and *proposes* entries; the gate decides | at the end of a session, when the outcome is in a transcript and you want it distilled rather than dumped |
+| `sigil capture` | a raw capture: verbatim, unfiltered, `state=raw` | anything you might need later and have not judged yet — cheap, and it may never be promoted |
+| `sigil write` | a curated entry you already trust, written directly | you know the fact and the evidence now, and want no model in the loop |
+| `sigil reflect <transcript>` | a model reads a transcript and *proposes* entries; the gate decides | at the end of a session, when the outcome is in a transcript and you want it distilled rather than dumped |
 
 `capture` and `write` take the text as an argument or on stdin. `reflect` runs one pass, promotes
 the proposals that clear the gate, and leaves the rest raw.
 
-A fourth door is `quipu import fabric <dir>`, which reads an existing Icarus/fabric corpus into the
+A fourth door is `sigil import fabric <dir>`, which reads an existing Icarus/fabric corpus into the
 vault so an old archive becomes recallable through the same `search` / `timeline` / `export` paths.
 `--dry-run` reports what it would do and writes nothing — `{"dry_run": true, "written": 1,
 "skipped": 1, "by_state": {"promoted": 1}}`. `training_value: low` entries arrive as `state=pruned`
@@ -88,7 +88,7 @@ The gate is one line, in `quipu/promote.py`:
 promoted = p.importance >= cfg.promote_threshold and bool(p.evidence)
 ```
 
-`promote_threshold` is `0.5` in `.quipu/config.toml`. Both halves must hold.
+`promote_threshold` is `0.5` in `.sigil/config.toml`. Both halves must hold.
 
 **The summary is a statement, not a topic. The evidence is something a skeptic could re-check** — a
 number, a command, a path, a log line. **One fact per entry. The `ask` is self-contained**,
@@ -111,15 +111,15 @@ a proposal gets one, classified from its own evidence text — no model call, no
 
 | kind | means | example |
 |---|---|---|
-| `command` | something a person could re-run | `` `quipu reindex` dropped it `` |
+| `command` | something a person could re-run | `` `sigil reindex` dropped it `` |
 | `path` | something a person could open | `quipu/hook.py:76` |
 | `url` | something a person could fetch | `https://…/runs/42715230290` |
 | `claim` | prose that points at nothing re-checkable | `see log` |
 
 `claim` is not a rejection: a 9-byte "see log" is a weak memory, not a false one, and refusing it would
 lose the claim while still leaving the corpus unable to say how much of it is re-checkable. It is
-recorded, indexed, and filterable: `quipu stats` reports the mix and the evidence-size distribution, and
-`quipu export sft` takes `--evidence-kind command,path,url` and `--min-evidence-bytes 60` to hold the
+recorded, indexed, and filterable: `sigil stats` reports the mix and the evidence-size distribution, and
+`sigil export sft` takes `--evidence-kind command,path,url` and `--min-evidence-bytes 60` to hold the
 training set to the strong half without touching the vault — filtering is a view, not a delete.
 
 ## Correcting something
@@ -128,7 +128,7 @@ When you learn an entry was wrong, do not edit it and do not delete it. Write th
 point it at the old one:
 
 ```bash
-quipu write --kind decision --state promoted \
+sigil write --kind decision --state promoted \
   --summary "DOCP 3600 is stable again after the BIOS 2601 flash" \
   --evidence "3 consecutive boots, 0 MCE lines each" \
   --ask "why did the box reboot at 03:02?" --project wraith --agent glitch \
@@ -136,7 +136,7 @@ quipu write --kind decision --state promoted \
 ```
 
 `--supersedes` takes an entry id and is repeatable. `--edge` is `SRC:PREDICATE:DST` and is
-repeatable too. This is what produces a preference pair later: `quipu export dpo` walks the
+repeatable too. This is what produces a preference pair later: `sigil export dpo` walks the
 `supersedes` links and emits one pair per link — the new entry as `chosen`, the old one as
 `rejected`, under the prompt the pair shares (meta abbreviated; `session` and `confidence`
 elided):
@@ -155,15 +155,15 @@ exists to produce: the memory changed its mind, so it already knows which answer
 
 **The graph follows `--supersedes`.** Writing the correction closes the live edges the superseded
 entry asserted, dated at the instant the correction was written, and the closure is recorded in the
-markdown — so `quipu timeline` shows one live window (`→ now`) for one fact, and
-`rm .quipu/index.db` + `quipu reindex` reproduces the same history instead of resurrecting the old
+markdown — so `sigil timeline` shows one live window (`→ now`) for one fact, and
+`rm .sigil/index.db` + `sigil reindex` reproduces the same history instead of resurrecting the old
 belief. An edge the correction restates itself is left open: restating a fact under a new entry
 corrects the carrier, not the belief.
 
-Two things stay in your hands. `quipu invalidate <edge-id>` closes a single window you simply want
-gone, and `quipu contradict <edge-id> src pred dst` closes it and asserts a replacement in one
-transaction. Edges are never deleted; the closed row keeps its window and `quipu export graph` marks
-it `"live": false`. `quipu audit` reports any superseded entry whose edge is still live, which is
+Two things stay in your hands. `sigil invalidate <edge-id>` closes a single window you simply want
+gone, and `sigil contradict <edge-id> src pred dst` closes it and asserts a replacement in one
+transaction. Edges are never deleted; the closed row keeps its window and `sigil export graph` marks
+it `"live": false`. `sigil audit` reports any superseded entry whose edge is still live, which is
 the shape a vault written by an older quipu is in.
 
 ### Project hubs: a view over the tag, not an edge per entry
@@ -175,8 +175,8 @@ the markdown on every reindex, so it would rewrite them forever. The tag is alre
 is already in the markdown, so the hub is derived at read time instead:
 
 ```bash
-quipu neighbors shitter      # entries tagged `shitter`, after the edges
-quipu timeline glitch        # the same view, dated by each entry's own creation
+sigil neighbors shitter      # entries tagged `shitter`, after the edges
+sigil timeline glitch        # the same view, dated by each entry's own creation
 ```
 
 Nothing is written; `stats` reports `entries_with_an_edge` and `edges_by_predicate` so the gap is
@@ -192,16 +192,16 @@ note about a decision. That is a citation and it is derived the same way, becaus
 stays true forever:
 
 ```bash
-quipu neighbors e2314ae5     # what this entry cites, and what cites it
+sigil neighbors e2314ae5     # what this entry cites, and what cites it
 ```
 
 An 8-hex word is only a citation if the corpus has that entry, so a short commit sha is not one. Nothing
-is written; `quipu audit` reports an edge whose predicate is outside the closed vocabulary (defaults plus
-whatever `.quipu/config.toml` adds), live or closed, because a graph rots into 400 spellings of "uses"
+is written; `sigil audit` reports an edge whose predicate is outside the closed vocabulary (defaults plus
+whatever `.sigil/config.toml` adds), live or closed, because a graph rots into 400 spellings of "uses"
 quietly.
 
 A hub is a place to look, not a claim about how things relate. For those, assert a real predicate —
-`--edge` on the CLI, `edges` on `quipu_write` through the provider — and keep the vocabulary closed:
+`--edge` on the CLI, `edges` on `sigil_write` through the provider — and keep the vocabulary closed:
 `causes`, `depends_on`, `implements`, `supersedes`, `decided_against`, `measured_as`, `located_in`,
 `used_by`, `blocks`, `owned_by`, `part_of`, `contradicts`, `learned_from`.
 
@@ -211,7 +211,7 @@ An import from before the frontmatter fix left 88 notes with a quoted, truncated
 each one's origin and rewrites the note in place:
 
 ```bash
-quipu --vault ~/vault repair
+sigil --vault ~/vault repair
 ```
 
 It is a dry run until you pass the apply flag, and it prints what each note would become, prefixed by
@@ -229,21 +229,21 @@ own body, 10 more as quotes-only, and 4 left as findings. A second run finds not
 
 ### An edge the index holds and the markdown does not
 
-`quipu edge` records every edge into the entry that asserted it, because the markdown is the truth and
-`rm .quipu/index.db` must lose nothing. A carrier that names no entry breaks that: the row lands in
+`sigil edge` records every edge into the entry that asserted it, because the markdown is the truth and
+`rm .sigil/index.db` must lose nothing. A carrier that names no entry breaks that: the row lands in
 SQLite, nothing records it, and the next rebuild silently drops a live belief. The command now refuses
 such a carrier instead of ignoring it — `--note` takes an entry id, never a description — and a vault
 written before that rule can be repaired:
 
 ```bash
-quipu --vault ~/vault repair --edges            # dry run: edge id, spec, the entry that will carry it
-quipu --vault ~/vault repair --edges --apply    # write the spec into that entry's frontmatter
+sigil --vault ~/vault repair --edges            # dry run: edge id, spec, the entry that will carry it
+sigil --vault ~/vault repair --edges --apply    # write the spec into that entry's frontmatter
 ```
 
 The carrier is derived from the edge's own `src`, which is the entry that asserted it, and the row's
 `note_id` is only a fallback — that field is exactly where a bad caller wrote prose. An edge with no
 entry to carry it is reported with the candidates it tried and left alone; the command exits non-zero
-while any remain, the same contract the summary repair makes. `quipu audit` reports them under
+while any remain, the same contract the summary repair makes. `sigil audit` reports them under
 `edges_not_in_markdown` in the meantime.
 
 ## Importing fabric: quoted and wrapped summaries
@@ -257,7 +257,7 @@ summary: 'Corrected metadata for PRL mining fleet details (agent: hermes, projec
 ```
 
 The importer folds those back into one value and strips the quotes, so an import yields the same handle
-fabric wrote. If you imported before that fix, `quipu audit` names every entry still carrying
+fabric wrote. If you imported before that fix, `sigil audit` names every entry still carrying
 a leading quote character — the parser fix does not rewrite notes that are already on disk, and the audit
 is how the damage stays visible.
 
@@ -269,7 +269,7 @@ today. A hook pointed at that directory reflects the past and nothing else, and 
 the live session from the db instead:
 
 ```bash
-quipu --vault ~/vault hook --session-db ~/.hermes/profiles/glitch/state.db --session f71c6b37 \
+sigil --vault ~/vault hook --session-db ~/.hermes/profiles/glitch/state.db --session f71c6b37 \
   --agent glitch --project quipu
 ```
 
@@ -290,10 +290,10 @@ Entries have always carried `created`; search now filters on it, so "what did we
 a query instead of a list you read dates off.
 
 ```bash
-quipu --vault ~/vault search "glitch memory" --since 2026-10-01
-quipu --vault ~/vault search "quipu" --until 2026-10-28
-quipu --vault ~/vault search "release" --since 2026-10-01 --until 2026-10-29
-quipu --vault ~/vault search "release" --since 2026-10-01T12:30:00Z
+sigil --vault ~/vault search "glitch memory" --since 2026-10-01
+sigil --vault ~/vault search "quipu" --until 2026-10-28
+sigil --vault ~/vault search "release" --since 2026-10-01 --until 2026-10-29
+sigil --vault ~/vault search "release" --since 2026-10-01T12:30:00Z
 ```
 
 A bare date names a **day**, which is the only sane reading of the flag: `--since 2026-10-01` starts at
@@ -303,7 +303,7 @@ written. Offsets are normalised to UTC, and an unparseable value is a usage erro
 never a filter that quietly disappeared:
 
 ```
-$ quipu search quipu --since october
+$ sigil search quipu --since october
 --since/--until: 'october' is not a date or an ISO instant — use 2026-10-01 or 2026-10-01T12:30:00Z
 ```
 
@@ -315,17 +315,17 @@ exactly those 22 — a clean partition, no day dropped either side.
 ## The brief: what an agent reads before it knows what to ask
 
 A vault answers a question well. It does not help an agent that has just woken up and has no question
-yet — so `quipu brief` writes the standing answer: promoted entries only, one line each, grouped by kind,
+yet — so `sigil brief` writes the standing answer: promoted entries only, one line each, grouped by kind,
 highest importance first.
 
 ```bash
-quipu --vault ~/vault brief                      # -> .quipu/brief/vault.md, 40 entries
-quipu --vault ~/vault brief --project quipu      # -> .quipu/brief/quipu.md
-quipu --vault ~/vault brief --stdout --limit 0   # everything, to a pipe
+sigil --vault ~/vault brief                      # -> .sigil/brief/vault.md, 40 entries
+sigil --vault ~/vault brief --project quipu      # -> .sigil/brief/quipu.md
+sigil --vault ~/vault brief --stdout --limit 0   # everything, to a pipe
 ```
 
 It is deterministic and model-free: no retrieval, no ranking, no LLM call, so the same vault always
-renders the same bytes. It is also **derived**, like the FTS table: it lives under `.quipu/brief/`, never
+renders the same bytes. It is also **derived**, like the FTS table: it lives under `.sigil/brief/`, never
 beside the entries in `notes/`, because a generated page among the entries would be ingested as an entry
 and rank for everything it mentions.
 
@@ -335,7 +335,7 @@ a human, not for a context window.
 
 ## One sentence per summary, and the limit enforces it
 
-`quipu write` and the MCP `write` tool refuse a `summary` over **280 bytes**:
+`sigil write` and the MCP `write` tool refuse a `summary` over **280 bytes**:
 
 ```
 summary is 412 bytes, limit 280: this is a blob, not a handle. Put the detail in --body and keep one
@@ -361,15 +361,15 @@ body or a fenced block crowds real recall. Write one sentence here and put the b
 --allow-summary-blob if this really is the handle).
 ```
 
-`quipu capture` is friendlier, because its body *is* the capture: it takes the first prose line as the
+`sigil capture` is friendlier, because its body *is* the capture: it takes the first prose line as the
 handle and keeps the blob in the body. The importer does the same for a historical note and refuses only
 when the body holds no prose at all, reporting `summary not prose` in `skipped_by_reason` — losing a
-memory to tidy a field is the worse trade. `quipu audit` reports `blob summary` for anything that got in
+memory to tidy a field is the worse trade. `sigil audit` reports `blob summary` for anything that got in
 before the rule existed.
 
 ## Optional semantic search
 
-`quipu search` is lexical (SQLite FTS5 + bm25) and works with nothing else installed. When a vault's
+`sigil search` is lexical (SQLite FTS5 + bm25) and works with nothing else installed. When a vault's
 entries use different words from the questions you ask, you can add embeddings from any local
 OpenAI-compatible endpoint — quipu itself still has zero dependencies, it just POSTs text:
 
@@ -378,12 +378,12 @@ embedding mode with mean pooling (a `nomic-embed-text-v1.5` f16 GGUF on CPU is e
 embedded in 37 s), ollama, or anything else speaking that shape. Then:
 
 ```bash
-quipu --vault ~/vault embed --url http://127.0.0.1:8083/v1/embeddings --model nomic-embed
-quipu --vault ~/vault search "did we already try the other approach" --hybrid \
+sigil --vault ~/vault embed --url http://127.0.0.1:8083/v1/embeddings --model nomic-embed
+sigil --vault ~/vault search "did we already try the other approach" --hybrid \
   --embed-url http://127.0.0.1:8083/v1/embeddings --embed-model nomic-embed
 ```
 
-Or put the endpoint in `.quipu/config.toml` and drop the flags:
+Or put the endpoint in `.sigil/config.toml` and drop the flags:
 
 ```toml
 [embed]
@@ -392,7 +392,7 @@ model = "nomic-embed"
 ```
 
 `embed` is idempotent — it re-embeds only entries whose text changed, so it is cheap to re-run after a
-`reindex`. Vectors live in `.quipu/index.db` and are derived data: losing the index costs one re-embed,
+`reindex`. Vectors live in `.sigil/index.db` and are derived data: losing the index costs one re-embed,
 never a memory, and `--hybrid` with no vectors or no endpoint falls back to the lexical ranking and says
 why on stderr.
 
@@ -410,18 +410,18 @@ questions that share no vocabulary with the corpus, not as a default.
 ## The question an entry answers
 
 An entry carries two halves: the `summary` (the claim) and the `ask` (the question a searcher would have
-asked to find it). `quipu export sft` needs both — an entry without an ask is recall only, it teaches
+asked to find it). `sigil export sft` needs both — an entry without an ask is recall only, it teaches
 nothing — and a vault migrated from an older system mostly has no asks, because the old format never
 stored one. `ask-backfill` writes them:
 
 ```bash
-quipu --vault ~/vault ask-backfill --count         # how many entries have no ask
-quipu --vault ~/vault ask-backfill --sample 5      # print five proposals, write nothing
-quipu --vault ~/vault ask-backfill --apply         # write the ask lines in place
+sigil --vault ~/vault ask-backfill --count         # how many entries have no ask
+sigil --vault ~/vault ask-backfill --sample 5      # print five proposals, write nothing
+sigil --vault ~/vault ask-backfill --apply         # write the ask lines in place
 ```
 
 One model call per entry, temperature 0, no chain, no tools, against the OpenAI-compatible endpoint in
-`.quipu/config.toml` (`[llm] base_url`; `--url`/`--model`/`--api-key` override it, and a cloud key is the
+`.sigil/config.toml` (`[llm] base_url`; `--url`/`--model`/`--api-key` override it, and a cloud key is the
 usual reason to). Validation is the guard rail, not the model: an answer must be one line ending in `?`,
 between 20 and 200 bytes, and not a restatement of the summary with a question mark bolted on. Anything
 else — prose, a quote, `NONE`, a question cut off mid-word — costs that entry and nothing else, and is
@@ -431,10 +431,10 @@ The `max_tokens` cap is 400 on purpose: a reasoning model spends the budget on `
 first, and at 80 it truncated most answers, which then read as a bad model instead of a bad cap.
 
 Writing is in place: the `ask:` line lands after `summary:`, the path does not change, and the body is
-not touched — the same discipline `quipu repair` follows, so no second note appears under a new slug.
+not touched — the same discipline `sigil repair` follows, so no second note appears under a new slug.
 
 Measured on the live vault (870 entries, 301 promoted): `--count` reported 265 missing, a corpus run
-wrote 241 and rejected 36, and `quipu export sft` went from 18 examples to 265.
+wrote 241 and rejected 36, and `sigil export sft` went from 18 examples to 265.
 
 ## Hooking a session end
 
@@ -442,7 +442,7 @@ A framework can call one command when a session ends, without embedding quipu an
 anything about memory itself:
 
 ```bash
-quipu --vault ~/vault hook --transcript session.md --agent glitch --project quipu
+sigil --vault ~/vault hook --transcript session.md --agent glitch --project quipu
 ```
 
 It reads the transcript (a path, or `-` for stdin), runs the reflection pass, writes what survives the
@@ -457,7 +457,7 @@ A long transcript is chunked, and **each chunk is written as it finishes**, so a
 reflection failed at chunk 20 of 24: JSONDecodeError: … (19 chunk(s) applied, 64 entries written)
 ```
 
-The chunks already applied are recorded in `<vault>/.quipu/chunks/<session>.json`, keyed by the chunk's
+The chunks already applied are recorded in `<vault>/.sigil/chunks/<session>.json`, keyed by the chunk's
 text, so a retry reads only what did not land — and that record is derived state, like the index:
 delete it and the next pass simply re-reads everything. A claim an earlier chunk already wrote is never
 written twice by a later one.
@@ -484,13 +484,13 @@ the vault is only as good as the discipline behind it.
 
 Hermes can also drive quipu directly, as a memory provider: `memory.provider: quipu` in the
 profile's `config.yaml`. The provider then searches the vault before each answer on its own, and
-appends the turns to a session journal under `.quipu/`. Two tools appear in the agent's tool list,
-`quipu_search` and `quipu_write`, for the times the agent wants to reach further than the recall
+appends the turns to a session journal under `.sigil/`. Two tools appear in the agent's tool list,
+`sigil_search` and `sigil_write`, for the times the agent wants to reach further than the recall
 budget allows.
 
 What the provider deliberately does **not** do is write an entry per turn. The journal is a
-transcript; entries still come from the promotion pass — `quipu reflect`, `quipu hook`, or an
-explicit `quipu write` — and they clear the same gate either way. The append-only failure this
+transcript; entries still come from the promotion pass — `sigil reflect`, `sigil hook`, or an
+explicit `sigil write` — and they clear the same gate either way. The append-only failure this
 project exists to stop is not something the provider introduces on a new path.
 
 [HERMES.md](HERMES.md) has the install, the vault lookup order, the token budgets and the failure
@@ -511,7 +511,7 @@ Two shapes are understood:
 - **Markdown or anything else** — passed through untouched, because a human already chose its shape.
 
 ```bash
-quipu --vault ~/vault reflect ~/.hermes/profiles/glitch/sessions/<session>.jsonl --max-chars 4000
+sigil --vault ~/vault reflect ~/.hermes/profiles/glitch/sessions/<session>.jsonl --max-chars 4000
 ```
 
 `--max-chars` (default 24000) splits on **turn boundaries only** — no message is ever cut in half. One turn
@@ -529,15 +529,15 @@ chunk 2/4: 1 proposals
 ```
 
 Proposals are de-duplicated by summary across chunks — neighbouring context makes the same claim come back
-twice, and one claim must stay one entry. `quipu hook` uses the same loader and chunker and takes the same
+twice, and one claim must stay one entry. `sigil hook` uses the same loader and chunker and takes the same
 `--max-chars`; its `--timeout` still bounds the **whole** pass, not each chunk.
 
 ### The two timeouts
 
-Two different budgets, and they are not interchangeable. `[llm] timeout` in `.quipu/config.toml` (default
+Two different budgets, and they are not interchangeable. `[llm] timeout` in `.sigil/config.toml` (default
 600 s) is the read timeout for **one request** to the model endpoint — raise it when a single chunk is
-simply slow. `--endpoint-timeout SECONDS` on `quipu reflect` and `quipu hook` overrides it for that
-command only. `quipu hook --timeout` is the other knob entirely: the budget for the **whole pass**, all
+simply slow. `--endpoint-timeout SECONDS` on `sigil reflect` and `sigil hook` overrides it for that
+command only. `sigil hook --timeout` is the other knob entirely: the budget for the **whole pass**, all
 chunks together — raise it when the pass as a whole is running long. A value of `0`, a negative number or
 a non-integer is refused with an error naming `llm.timeout`.
 
@@ -555,7 +555,7 @@ message. A timed-out request now says which knob to turn:
 ```
 LLM request failed: http://127.0.0.1:8080/v1/chat/completions: no response within 600s. One chunk is one
 request, so a large chunk needs a longer budget: raise `--endpoint-timeout` (or `[llm] timeout` in
-.quipu/config.toml), lower `--max-chars`, or point `[llm] base_url` at a faster endpoint
+.sigil/config.toml), lower `--max-chars`, or point `[llm] base_url` at a faster endpoint
 ```
 
 Raise `--endpoint-timeout` when a chunk is slow; raise `hook --timeout` (or shrink `--max-chars`) when the
@@ -566,44 +566,44 @@ needs a budget larger than 240 s.
 
 | command | when you want it | what each record carries |
 |---|---|---|
-| `quipu export sft --out data/sft.jsonl` | supervised fine-tuning examples | `messages` — an optional system prompt (`--system`), then the `ask` as the user turn and summary + evidence + body as the assistant turn — plus `meta` with entry id, kind, state, agent, project, session, created, confidence, importance, source, evidence_kind, evidence_bytes. `--evidence-kind` and `--min-evidence-bytes` narrow the set to entries a skeptic could actually re-check |
-| `quipu export dpo --out data/dpo.jsonl` | preference pairs from corrections | `prompt`, `chosen`, `rejected`, and `meta` carrying the new entry, the superseded entry, and the deciding evidence as `reason` |
-| `quipu export graph --out data/graph` | the entity/relation graph as data | `nodes.jsonl` (entities, every spelling seen kept as `aliases`) and `edges.jsonl` (src, predicate, dst, note id, confidence, validity window, `live` flag) |
+| `sigil export sft --out data/sft.jsonl` | supervised fine-tuning examples | `messages` — an optional system prompt (`--system`), then the `ask` as the user turn and summary + evidence + body as the assistant turn — plus `meta` with entry id, kind, state, agent, project, session, created, confidence, importance, source, evidence_kind, evidence_bytes. `--evidence-kind` and `--min-evidence-bytes` narrow the set to entries a skeptic could actually re-check |
+| `sigil export dpo --out data/dpo.jsonl` | preference pairs from corrections | `prompt`, `chosen`, `rejected`, and `meta` carrying the new entry, the superseded entry, and the deciding evidence as `reason` |
+| `sigil export graph --out data/graph` | the entity/relation graph as data | `nodes.jsonl` (entities, every spelling seen kept as `aliases`) and `edges.jsonl` (src, predicate, dst, note id, confidence, validity window, `live` flag) |
 
 Every record carries provenance, so a dataset can be rebuilt from the vault. Only `promoted`
 entries with a usable `ask` become SFT examples; only `supersedes` links become preference pairs.
 
 ## When it goes wrong
 
-**No model available.** `quipu reflect <transcript> --fake <file.json>` reads the proposals from
+**No model available.** `sigil reflect <transcript> --fake <file.json>` reads the proposals from
 a JSON file instead of calling an endpoint — no network, no model:
 
 ```bash
-quipu reflect transcript.md --fake response.json
+sigil reflect transcript.md --fake response.json
 ```
 
 ```
 2 proposals, 2 promoted, 0 left raw
 ```
 
-The transcript is required. `quipu reflect --fake response.json` on its own exits 2 with
+The transcript is required. `sigil reflect --fake response.json` on its own exits 2 with
 `empty transcript`; the transcript can also be piped in on stdin. `examples/demo.sh` runs this
 whole path with no model. Without `--fake`, `reflect` talks to the OpenAI-compatible endpoint in
-`.quipu/config.toml` (`[llm] base_url`, default `http://127.0.0.1:8080/v1`), and if nothing is
+`.sigil/config.toml` (`[llm] base_url`, default `http://127.0.0.1:8080/v1`), and if nothing is
 listening it fails with a message naming the URL it tried — `RuntimeError: LLM request failed:
 http://127.0.0.1:8080/v1/chat/completions: <urlopen error [Errno 111] Connection refused>` —
 and the command exits non-zero. An HTTP error is reported with its status code, and a body that is
 not the expected JSON names the URL too, so a broken endpoint is never mistaken for a model with
 nothing to say. `--dry-run` prints the proposals and writes nothing.
 
-**The promotion rate.** `quipu stats` reports `promotion_rate` as promoted ÷ total entries. Near
+**The promotion rate.** `sigil stats` reports `promotion_rate` as promoted ÷ total entries. Near
 **1.0** means nearly everything was promoted: you are writing curated entries and barely capturing
 — fine for a hand-curated vault, a warning sign for a session-driven one, since the raw layer is
 what keeps a corpus clean. Near **0.0** means the gate is rejecting nearly everything: the
 reflection pass is producing low-importance proposals, or entries without evidence. Nothing is
 wrong with the tool; the proposals are not good enough yet.
 
-**`quipu audit` problems.** It prints a JSON list and exits non-zero when it finds any:
+**`sigil audit` problems.** It prints a JSON list and exits non-zero when it finds any:
 `"2b1a8008: promoted without evidence"`, `"6f97a10b: promoted without evidence"`,
 `"6f97a10b: supersedes missing entry deadbeef"`.
 
@@ -612,16 +612,16 @@ wrong with the tool; the proposals are not good enough yet.
 - `empty summary` — no summary. It cannot be retrieved usefully and never exports.
 
 **A predicate outside the vocabulary.** Predicates are closed on purpose: `ValueError: predicate
-'likes' is not in the vocabulary; add it to <vault>/.quipu/config.toml or pass
-allow_new_predicate=True`. Add it to `predicates` in `.quipu/config.toml`, or pass `--allow-new` if
+'likes' is not in the vocabulary; add it to <vault>/.sigil/config.toml or pass
+allow_new_predicate=True`. Add it to `predicates` in `.sigil/config.toml`, or pass `--allow-new` if
 you are sure.
 
-**A malformed `--edge`** — the spec is `SRC:PRED:DST`; `quipu write` says
+**A malformed `--edge`** — the spec is `SRC:PRED:DST`; `sigil write` says
 `--edge wants src:predicate:dst, got 'onlyone:part'` and exits 2.
 
-**A `--edge` that fails after the entry was written.** `quipu write` writes the entry to `notes/`
+**A `--edge` that fails after the entry was written.** `sigil write` writes the entry to `notes/`
 before it asserts the edges, so a bad predicate leaves the entry on disk but unindexed — `quipu
-search` will not find it until `quipu reindex` runs. The index is disposable; the markdown is the
+search` will not find it until `sigil reindex` runs. The index is disposable; the markdown is the
 truth, and a reindex rebuilds it in milliseconds.
 
 **A skipped edge at reindex.** A spec in an entry's frontmatter that is malformed, or whose predicate
@@ -635,7 +635,7 @@ indexed 873 entries, rebuilt 2 edges (0 closed), 1 edge skipped
 ```
 
 An out-of-vocabulary predicate is reported the same way: the entry, the spec, and the config file to
-add the predicate to. Fix it in the note's frontmatter, or add the predicate to `.quipu/config.toml`
+add the predicate to. Fix it in the note's frontmatter, or add the predicate to `.sigil/config.toml`
 and reindex. A vault with twenty skips prints twenty lines, not one line twenty times.
 
 **An index written by an older version.** It is rebuilt from the markdown, not migrated — the index is

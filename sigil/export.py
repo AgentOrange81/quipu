@@ -19,7 +19,7 @@ from .store import Entry, iter_entries
 
 def _meta(e: Entry, **extra) -> dict:
     return {
-        "quipu": {
+        "sigil": {
             "entry": e.id, "kind": e.kind, "state": e.state, "agent": e.agent,
             "project": e.project, "session": e.session, "created": e.created,
             "confidence": e.confidence, "importance": e.importance, "source": e.source,
@@ -96,7 +96,7 @@ def export_preferences(cfg: Config, out: Path) -> int:
                     "prompt": e.ask or old.ask or f"What is the current state of {e.project or 'this work'}?",
                     "chosen": _answer(e),
                     "rejected": _answer(old),
-                    "meta": _meta(e, superseded=_meta(old)["quipu"], reason=e.evidence),
+                    "meta": _meta(e, superseded=_meta(old)["sigil"], reason=e.evidence),
                 }, ensure_ascii=False) + "\n")
                 n += 1
     return n

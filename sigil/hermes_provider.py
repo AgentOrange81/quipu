@@ -48,7 +48,7 @@ def _load_plugin_config() -> dict[str, Any]:
         from hermes_cli.config import load_config
 
         memory = load_config().get("memory", {})
-        block = memory.get("quipu", {}) if isinstance(memory, dict) else {}
+        block = (memory.get("sigil") or memory.get("quipu") or {}) if isinstance(memory, dict) else {}
         return dict(block) if isinstance(block, dict) else {}
     except Exception:
         return {}

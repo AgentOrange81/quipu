@@ -36,7 +36,7 @@ main
 | role | owns | never does |
 |---|---|---|
 | **orchestrator** (glitch) | verification, commits, merges, releases, anything live | hand-writes feature code while a builder is idle |
-| **builder** (cipher) | `quipu/**` on its branch | commit, push, merge, touch `tests/` or `docs/` |
+| **builder** (cipher) | `sigil/**` on its branch | commit, push, merge, touch `tests/` or `docs/` |
 | **QA** (vector) | `tests/**`, gate scripts, adversarial review of the builder's diff | verify its own code, or the builder verify its own tests |
 | **writer** (glyph) | `docs/**`, README, PLAN, release notes | change behaviour, or edit code |
 | **research** (whoever is free) | `benchmarks/**`, external surveys, measurement reports | land code without a review |
@@ -70,6 +70,6 @@ The body explains *why*, and names the failure it prevents when that is the reas
 
 ## Adding a predicate
 
-Predicates are a closed vocabulary on purpose. Add one in `.quipu/config.toml` for your vault, and to
-`DEFAULT_PREDICATES` in `quipu/__init__.py` only if it is generally useful — with a line in the PR
+Predicates are a closed vocabulary on purpose. Add one in `.sigil/config.toml` for your vault, and to
+`DEFAULT_PREDICATES` in `sigil/__init__.py` only if it is generally useful — with a line in the PR
 saying which existing predicate it cannot be expressed as.

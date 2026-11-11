@@ -69,13 +69,13 @@ jobs:
           python -m venv /tmp/relcheck
           /tmp/relcheck/bin/python -m pip install --upgrade pip >/dev/null
           /tmp/relcheck/bin/python -m pip install dist/*.whl
-          /tmp/relcheck/bin/quipu --version
-          /tmp/relcheck/bin/quipu --vault /tmp/relvault init
-          /tmp/relcheck/bin/quipu --vault /tmp/relvault write --kind decision --state promoted \
+          /tmp/relcheck/bin/sigil --version
+          /tmp/relcheck/bin/sigil --vault /tmp/relvault init
+          /tmp/relcheck/bin/sigil --vault /tmp/relvault write --kind decision --state promoted \
             --summary "the wheel's console script runs" --evidence "pip install dist/*.whl" \
             --ask "does the released wheel work?" --project release
-          /tmp/relcheck/bin/quipu --vault /tmp/relvault search "console script"
-          /tmp/relcheck/bin/python -c "from quipu.mcp import serve; assert callable(serve)"
+          /tmp/relcheck/bin/sigil --vault /tmp/relvault search "console script"
+          /tmp/relcheck/bin/python -c "from sigil.mcp import serve; assert callable(serve)"
 
   publish:
     needs: verify
@@ -102,5 +102,5 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release create "${{ github.event.inputs.tag || github.ref_name }}" dist/* \
-            --title "quipu ${{ github.event.inputs.tag || github.ref_name }}" \
+            --title "sigil ${{ github.event.inputs.tag || github.ref_name }}" \
             --notes-file notes.md
