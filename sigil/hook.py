@@ -237,5 +237,8 @@ def run(cfg, transcript: str | Path, provider, agent: str = "", project: str = "
 
 
 def dry_run_requested(env: dict | None = None) -> bool:
-    value = (env or os.environ).get("QUIPU_HOOK_DRY_RUN", "")
+    # SIGIL_HOOK_DRY_RUN is the name; QUIPU_HOOK_DRY_RUN still works because a deployed hook script or a
+    # framework's env block carries it, and a dry run that silently becomes a spend is the wrong failure.
+    source = env or os.environ
+    value = source.get("SIGIL_HOOK_DRY_RUN") or source.get("QUIPU_HOOK_DRY_RUN", "")
     return value.strip().lower() in {"1", "true", "yes", "on"}

@@ -4,7 +4,7 @@ Verbatim capture, a temporal knowledge graph, and lifecycle-labeled training dat
 The vault is plain markdown (Obsidian-compatible); the index and graph live in SQLite.
 """
 
-__version__ = "0.9.0"
+__version__ = "0.10.0"
 
 KINDS = ("capture", "conclusion", "decision", "lesson", "fact", "handoff", "question")
 STATES = ("raw", "promoted", "pruned")
@@ -20,7 +20,7 @@ DEFAULT_PREDICATES = (
 # entry points, so the package itself is installable as the plugin dir (`.hermes/plugins/sigil ->
 # this directory`). Directory loading calls `register(ctx)` here, or instantiates a top-level
 # `MemoryProvider` subclass — so the class has to be exportable from the package root.
-from .hermes_provider import QuipuMemoryProvider  # noqa: E402,F401
+from .hermes_provider import SigilMemoryProvider  # noqa: E402,F401
 
 
 def register(ctx):

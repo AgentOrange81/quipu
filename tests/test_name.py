@@ -1,13 +1,21 @@
-"""The rename is an alias, not a cutover: both names must keep working until the old one is retired.
+"""The old name is retired at 0.10.0 — this file is the regression test for that.
 
-Every assertion here is a surface another process depends on — an import, an installed console script,
-the Hermes memory-provider entry point, the MCP identity, and the `--version` banner. A rename that
-breaks one of them breaks a profile's gateway at startup, which is why they are pinned rather than
-documented.
+Until 0.10.0 every surface here was pinned to work under BOTH names, because a rename that breaks an
+import, a console script or the provider entry point breaks a profile's gateway at startup. The alias
+had one release of grace and it is now spent, so these assertions run the other way: they fail if the
+old name is quietly re-introduced, which would let a stale config keep pointing a working install at a
+name nobody tests.
+
+What is deliberately NOT retired — data compatibility, not naming — and therefore not asserted here:
+`.quipu/` meta dirs (`test_legacy_vault_name`), a `[quipu]` config table (`test_config`), `QUIPU_VAULT`
+and `~/quipu-vault` in the provider's resolver, `memory.quipu.*` settings, and `quipu` in the evidence
+command vocabulary. A vault written before the rename must keep opening; deleting those would be a
+data-loss bug wearing a tidy-up costume.
 """
 from __future__ import annotations
 
 import importlib.metadata as md
+import importlib.util
 import re
 from pathlib import Path
 
@@ -19,52 +27,48 @@ ROOT = Path(__file__).resolve().parent.parent
 PYPROJECT = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
 
 
-def test_the_old_name_imports_the_same_engine():
-    """A config or a script that still says `import quipu` must reach the identical objects."""
-    import quipu
+def test_the_old_package_name_is_gone():
+    """`import quipu` must fail: a working import means the shim is back, or a stale wheel is installed."""
+    assert importlib.util.find_spec("quipu") is None, (
+        "the quipu alias is importable again — if this is not a re-introduced package, uninstall the "
+        "stale copy (`pip list | grep -i quipu`) because it shadows the retired name"
+    )
 
-    assert quipu.__version__ == sigil.__version__
-    assert quipu.register is sigil.register
 
-
-def test_the_alias_says_so_when_it_is_used():
-    """A silent alias becomes permanent by accident."""
-    import importlib
+def test_the_old_module_path_is_gone():
+    """`python -m quipu` is the other thing people hardcode; it must now be a plain ModuleNotFoundError."""
+    import subprocess
     import sys
-    import warnings
 
-    sys.modules.pop("quipu", None)
-    with warnings.catch_warnings(record=True) as caught:
-        warnings.simplefilter("always")
-        importlib.import_module("quipu")
-
-    messages = [str(w.message) for w in caught if issubclass(w.category, DeprecationWarning)]
-    assert any("sigil" in m for m in messages), messages
+    out = subprocess.run([sys.executable, "-m", "quipu", "--version"],
+                         capture_output=True, text=True, cwd=ROOT)
+    assert out.returncode != 0, "`python -m quipu` still runs the CLI"
+    assert "No module named" in out.stderr, out.stderr
 
 
-def test_both_console_scripts_point_at_one_main():
+def test_pyproject_declares_the_new_name_only():
+    """One script per entry point, one provider entry point, and only the sigil package in the wheel."""
     assert re.search(r'^sigil = "sigil\.cli:main"$', PYPROJECT, re.M)
     assert re.search(r'^sigil-capture = "sigil\.capture:main"$', PYPROJECT, re.M)
-    assert re.search(r'^quipu = "sigil\.cli:main"$', PYPROJECT, re.M)
-    assert re.search(r'^quipu-capture = "sigil\.capture:main"$', PYPROJECT, re.M)
-
-
-def test_the_memory_provider_entry_point_exists_under_both_names():
-    """Hermes resolves `provider: <name>` from the installed metadata; dropping the old key would make
-    an existing profile fail at gateway start rather than fall back."""
     assert re.search(r'^sigil = "sigil:register"$', PYPROJECT, re.M)
-    assert re.search(r'^quipu = "sigil:register"$', PYPROJECT, re.M)
+    assert re.search(r'^quipu = ', PYPROJECT, re.M) is None, "a quipu script or entry point is back"
+    assert re.search(r'^quipu-capture = ', PYPROJECT, re.M) is None
+    assert re.search(r'^packages = \["sigil"\]$', PYPROJECT, re.M), (
+        "the wheel must ship exactly one package: a second one is either the alias returning or a "
+        "package nobody tests"
+    )
 
 
-def test_the_installed_entry_points_agree_when_the_package_is_installed():
+def test_the_installed_metadata_has_no_old_name():
+    """The entry points Hermes resolves from a real install, not the source tree."""
     try:
-        points = md.entry_points(group="hermes_agent.memory_providers")
+        providers = {p.name for p in md.entry_points(group="hermes_agent.memory_providers")}
     except Exception:  # pragma: no cover - an uninstalled source tree
         pytest.skip("no installed metadata")
-    names = {p.name for p in points if p.value.startswith("sigil")}
-    if not names:
+    ours = {n for n in providers if n in {"sigil", "quipu"}}
+    if not ours:
         pytest.skip("package not installed in this interpreter")
-    assert {"sigil", "quipu"} <= names
+    assert ours == {"sigil"}, f"stale install still advertises {ours - {'sigil'}} — reinstall the package"
 
 
 def test_the_version_banner_says_sigil(capsys):
@@ -86,14 +90,14 @@ def test_the_mcp_server_calls_itself_sigil():
     assert '"serverInfo": {"name": "quipu"' not in source
 
 
-def test_the_old_module_path_still_runs_the_cli():
-    """`python -m quipu` is the other thing people hardcode, and runpy needs a real loader for it —
-    a meta-path-only shim answers `import quipu` and fails `-m quipu` with `AttributeError: get_code`."""
-    import subprocess
-    import sys
+def test_a_vault_written_under_the_old_name_still_opens(tmp_path):
+    """The point of removing the name is not to remove the data: `.quipu/` is read where it lies."""
+    from sigil import config as config_mod
 
-    out = subprocess.run([sys.executable, "-m", "quipu", "--version"],
-                         capture_output=True, text=True, cwd=ROOT)
+    (tmp_path / "notes").mkdir()
+    (tmp_path / ".quipu").mkdir()
+    (tmp_path / ".quipu" / "config.toml").write_text("[quipu]\npromote_threshold = 0.7\n", encoding="utf-8")
 
-    assert out.returncode == 0, out.stderr
-    assert out.stdout.strip() == f"sigil {sigil.__version__}"
+    cfg = config_mod.load(tmp_path)
+    assert cfg.meta_dir.name == ".quipu"
+    assert cfg.promote_threshold == 0.7

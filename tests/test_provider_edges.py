@@ -14,22 +14,22 @@ from pathlib import Path
 
 import sigil.config
 import sigil.index
-from sigil.hermes_provider import QuipuMemoryProvider
+from sigil.hermes_provider import SigilMemoryProvider
 
 SUMMARY = "The 6700 XT pair needs HSA_OVERRIDE_GFX_VERSION set or torch sees no device"
 
 
-def _provider(tmp_path: Path, monkeypatch) -> tuple[QuipuMemoryProvider, Path]:
+def _provider(tmp_path: Path, monkeypatch) -> tuple[SigilMemoryProvider, Path]:
     vault = tmp_path / "vault"
     sigil.config.load(vault, create=True)
     monkeypatch.setenv("QUIPU_VAULT", str(vault))
-    provider = QuipuMemoryProvider()
+    provider = SigilMemoryProvider()
     provider.initialize("edges-test", hermes_home=str(tmp_path / ".hermes"), platform="cli")
     return provider, vault
 
 
-def _write(provider: QuipuMemoryProvider, **args) -> dict:
-    return json.loads(provider.handle_tool_call("quipu_write", args))
+def _write(provider: SigilMemoryProvider, **args) -> dict:
+    return json.loads(provider.handle_tool_call("sigil_write", args))
 
 
 def _edges(vault: Path) -> list[tuple[str, str, str]]:
@@ -43,7 +43,7 @@ def _edges(vault: Path) -> list[tuple[str, str, str]]:
 
 def test_the_schema_advertises_what_the_tool_accepts():
     """A field the schema omits is a field no model will ever send."""
-    (schema,) = [s for s in QuipuMemoryProvider().get_tool_schemas() if s["name"] == "quipu_write"]
+    (schema,) = [s for s in SigilMemoryProvider().get_tool_schemas() if s["name"] == "sigil_write"]
     body = schema.get("parameters") or schema.get("input_schema") or {}
     props = body["properties"]
     assert "edges" in props and "supersedes" in props

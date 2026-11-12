@@ -1,6 +1,31 @@
 # Changelog
 
-## Unreleased
+## 0.10.0 — 2026-11-11
+
+**Breaking: the `quipu` alias is retired.** The old name had one release of grace and it is spent. The
+package, the binaries, the module path, the Hermes provider entry point and the provider's tool names
+are all `sigil` now, and nothing answers to the old name.
+
+What to change, if anything still says `quipu`:
+
+| was | now |
+|---|---|
+| `quipu …` / `quipu-capture …` | `sigil …` / `sigil-capture …` |
+| `python -m quipu` | `python -m sigil` |
+| `import quipu`, `from quipu import config` | `import sigil`, `from sigil import config` |
+| `memory.provider: quipu` | `memory.provider: sigil` |
+| tools `quipu_search` / `quipu_write` | `sigil_search` / `sigil_write` |
+| `pip install quipu` | **never that** — `quipu` on PyPI is somebody else's package; install `sigil-memory` |
+
+`hermes_provider.QuipuMemoryProvider` is now `SigilMemoryProvider`; a session still holding a
+`quipu_*` tool schema gets a readable "provider handles `sigil_search`/`sigil_write`" error instead of
+a silent no-op.
+
+**Data compatibility is untouched — this is naming, not format.** A vault written before the rename
+keeps working exactly as it did: `.quipu/` derived state is read where it lies, a `[quipu]` config
+table still parses, `QUIPU_VAULT` and a `~/quipu-vault` directory are still resolved, `memory.quipu.*`
+settings still load, and `quipu` stays in the evidence command vocabulary (old evidence keeps
+classifying). Deleting those would be a data-loss bug wearing a tidy-up costume.
 
 ### Fixed
 

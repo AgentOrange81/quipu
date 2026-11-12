@@ -1,10 +1,10 @@
-# quipu as a Hermes memory provider
+# sigil as a Hermes memory provider
 
-Hermes can drive an agent from one memory backend. quipu can be that backend: `memory.provider:
-quipu` in the profile's `config.yaml` makes recall arrive in the prompt on its own and turns
+Hermes can drive an agent from one memory backend. sigil can be that backend: `memory.provider:
+sigil` in the profile's `config.yaml` makes recall arrive in the prompt on its own and turns
 land in the vault without the agent being asked to use a CLI.
 
-The failure this prevents is the one quipu was built around. Today quipu is a CLI an agent has to
+The failure this prevents is the one sigil was built around. Today sigil is a CLI an agent has to
 be told to use, and the vault is only as good as the agent's discipline: one session writes
 nothing, another dumps a transcript, and nothing tells you which. As a provider the recall
 discipline is the default, and the per-turn append — the thing that turns a corpus into noise —
@@ -12,31 +12,31 @@ never happens at all.
 
 ## Install
 
-quipu ships as an ordinary package that publishes a Hermes entry point, so nothing is copied
+sigil ships as an ordinary package that publishes a Hermes entry point, so nothing is copied
 into the profile. The entry point lives in the distribution's `pyproject.toml`:
 
 ```toml
 [project.entry-points."hermes_agent.memory_providers"]
-quipu = "quipu:register"
+sigil = "sigil:register"
 ```
 
-Install the released wheel — there is no PyPI publish step; the release workflow attaches the
-wheel and sdist to the GitHub Release:
+Install it from a checkout, or from the wheel the release workflow attaches to each GitHub Release
+(the asset is named `<distribution>-<version>-py3-none-any.whl`, e.g.
+`sigil_memory-0.10.0-py3-none-any.whl`):
 
 ```bash
-pip install https://github.com/AgentOrange81/sigil/releases/download/v0.3.0/quipu-0.3.0-py3-none-any.whl
+pip install -e .                              # from a clone of this repo
+pip install ./sigil_memory-0.10.0-py3-none-any.whl   # or a downloaded release asset
 ```
-
-or, from a checkout, `pip install -e .`.
 
 Then select it in the profile's `config.yaml` — two lines, nothing else:
 
 ```yaml
 memory:
-  provider: quipu
+  provider: sigil
 ```
 
-That is the whole selection: the entry-point name (`quipu`) is the name Hermes matches against
+That is the whole selection: the entry-point name (`sigil`) is the name Hermes matches against
 `memory.provider`.
 
 ## Where the vault comes from
@@ -44,21 +44,23 @@ That is the whole selection: the entry-point name (`quipu`) is the name Hermes m
 The provider binds its vault from `initialize()`, taking the first of these that is an existing
 directory:
 
-1. `$QUIPU_VAULT` — an explicit path wins over everything else.
+1. `$SIGIL_VAULT` (the pre-rename `$QUIPU_VAULT` still resolves) — an explicit path wins over
+   everything else.
 2. `<hermes_home>/sigil-vault` — the profile-scoped vault, e.g.
    `~/.hermes/profiles/glitch/sigil-vault`.
 3. `~/sigil-vault` — the shared vault.
 
 So if your vault is not `~/sigil-vault` and you do not want it under the profile, set
-`QUIPU_VAULT` in the profile's environment:
+`SIGIL_VAULT` in the profile's environment:
 
 ```bash
-export QUIPU_VAULT=/path/to/vault
+export SIGIL_VAULT=/path/to/vault
 ```
 
-Two knobs, both optional, both read when the provider is constructed: `memory.quipu.limit`
-(default 5, entries per recall) and `memory.quipu.max_tokens` (default 400, the recall budget).
-The env vars `QUIPU_PREFETCH_LIMIT` and `QUIPU_PREFETCH_MAX_TOKENS` override the same two values.
+Two knobs, both optional, both read when the provider is constructed: `memory.sigil.limit`
+(default 5, entries per recall) and `memory.sigil.max_tokens` (default 400, the recall budget).
+The env vars `SIGIL_PREFETCH_LIMIT` and `SIGIL_PREFETCH_MAX_TOKENS` override the same two values.
+A pre-rename profile keeps working: `memory.quipu.*` and the `QUIPU_PREFETCH_*` env vars still load.
 
 ## What the agent sees
 
@@ -91,7 +93,7 @@ network unplugged.
 One JSON line per turn, with the timestamp, the session id and the user and assistant text (each
 side truncated to 4000 characters). That file is a transcript, not a memory. **No vault entry is
 created per turn** — the entry count does not move when a session runs, and the vault does not
-fill with `session: "fixed a bug"` rows. This is the append-only failure quipu exists to fix,
+fill with `session: "fixed a bug"` rows. This is the append-only failure sigil exists to fix,
 and the provider refuses to commit it.
 
 Entries come from a promotion pass instead: `sigil reflect` over a transcript, or `sigil hook` at
@@ -153,13 +155,13 @@ and the recall block has to appear in the turn's context.
 python -c "import importlib.metadata as m; print([e.name for e in m.entry_points(group='hermes_agent.memory_providers')])"
 ```
 
-`quipu` in that list means the distribution is installed where Hermes can see it; an empty list
+`sigil` in that list means the distribution is installed where Hermes can see it; an empty list
 means it is not — Hermes discovers a pip-installed provider by entry point, so a provider that
 imports but was installed elsewhere is invisible.
 
-**No vault found.** The provider says so instead of starting blind: `quipu: no vault directory
+**No vault found.** The provider says so instead of starting blind: `sigil: no vault directory
 found (looked for: ...)`, naming the paths it tried, in order. Create the vault with
-`sigil --vault <path> init`, or point `QUIPU_VAULT` at an existing one.
+`sigil --vault <path> init`, or point `SIGIL_VAULT` at an existing one.
 
 **An empty vault.** Not an error: recall returns nothing and the agent has no prior context.
 `sigil stats` reports `entries: 0`.
@@ -170,8 +172,8 @@ exits 2, names the path it tried, and creates nothing (#141). That is deliberate
 path used to *create* a vault there and answer `[]`, which reads exactly like "no memory about this".
 `sigil --vault <path> init` is the way to make a new one.
 
-**`QUIPU_VAULT` pointing somewhere else.** The provider takes the first candidate that is a
-directory, and `QUIPU_VAULT` is first — so an exported path silently wins over the profile vault.
+**`SIGIL_VAULT` pointing somewhere else.** The provider takes the first candidate that is a
+directory, and `SIGIL_VAULT` is first — so an exported path silently wins over the profile vault.
 The vault path is in the system block, so it is visible in the agent's own context.
 
 **A broken vault degrades, it does not crash.** The provider never raises into the agent loop:

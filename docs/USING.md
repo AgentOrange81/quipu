@@ -1,4 +1,4 @@
-# Using quipu
+# Using sigil
 
 Day-to-day notes for a working vault. Every command here exists on `main` today; the output is
 real, quoted from runs against a throwaway vault.
@@ -82,7 +82,7 @@ data for the sake of a tidier report.
 
 ## What makes an entry worth promoting
 
-The gate is one line, in `quipu/promote.py`:
+The gate is one line, in `sigil/promote.py`:
 
 ```python
 promoted = p.importance >= cfg.promote_threshold and bool(p.evidence)
@@ -112,7 +112,7 @@ a proposal gets one, classified from its own evidence text — no model call, no
 | kind | means | example |
 |---|---|---|
 | `command` | something a person could re-run | `` `sigil reindex` dropped it `` |
-| `path` | something a person could open | `quipu/hook.py:76` |
+| `path` | something a person could open | `sigil/hook.py:76` |
 | `url` | something a person could fetch | `https://…/runs/42715230290` |
 | `claim` | prose that points at nothing re-checkable | `see log` |
 
@@ -145,7 +145,7 @@ elided):
 {"prompt": "why did the box reboot at 03:02?",
  "chosen": "DOCP 3600 is stable again after the BIOS 2601 flash\n\nEvidence: 3 consecutive boots, 0 MCE lines each\n\n## Supersedes\n\n- [[e2314ae5]]",
  "rejected": "DOCP 3200 with FCLK 1600 is stable on the TRX40; 3600 was dropped after 649 CCEs\n\nEvidence: 649 MC25_STATUS CECC events in boot -1; 0 MC25 lines in the 3 boots since",
- "meta": {"quipu": {"entry": "525f74c3", "kind": "decision", "state": "promoted"},
+ "meta": {"sigil": {"entry": "525f74c3", "kind": "decision", "state": "promoted"},
           "superseded": {"entry": "e2314ae5", "kind": "decision", "state": "promoted"},
           "reason": "3 consecutive boots, 0 MCE lines each"}}
 ```
@@ -164,7 +164,7 @@ Two things stay in your hands. `sigil invalidate <edge-id>` closes a single wind
 gone, and `sigil contradict <edge-id> src pred dst` closes it and asserts a replacement in one
 transaction. Edges are never deleted; the closed row keeps its window and `sigil export graph` marks
 it `"live": false`. `sigil audit` reports any superseded entry whose edge is still live, which is
-the shape a vault written by an older quipu is in.
+the shape a vault written before the rename is in.
 
 ### Project hubs: a view over the tag, not an edge per entry
 
@@ -270,7 +270,7 @@ the live session from the db instead:
 
 ```bash
 sigil --vault ~/vault hook --session-db ~/.hermes/profiles/glitch/state.db --session f71c6b37 \
-  --agent glitch --project quipu
+  --agent glitch --project sigil
 ```
 
 `--session` takes an id, or any fragment that matches exactly one — a 64-hex id is not something a
@@ -320,7 +320,7 @@ highest importance first.
 
 ```bash
 sigil --vault ~/vault brief                      # -> .sigil/brief/vault.md, 40 entries
-sigil --vault ~/vault brief --project quipu      # -> .sigil/brief/quipu.md
+sigil --vault ~/vault brief --project sigil      # -> .sigil/brief/sigil.md
 sigil --vault ~/vault brief --stdout --limit 0   # everything, to a pipe
 ```
 
@@ -371,7 +371,7 @@ before the rule existed.
 
 `sigil search` is lexical (SQLite FTS5 + bm25) and works with nothing else installed. When a vault's
 entries use different words from the questions you ask, you can add embeddings from any local
-OpenAI-compatible endpoint — quipu itself still has zero dependencies, it just POSTs text:
+OpenAI-compatible endpoint — sigil itself still has zero dependencies, it just POSTs text:
 
 Start any OpenAI-compatible `/v1/embeddings` service on the box first — llama.cpp's server in
 embedding mode with mean pooling (a `nomic-embed-text-v1.5` f16 GGUF on CPU is enough: 858 entries
@@ -438,11 +438,11 @@ wrote 241 and rejected 36, and `sigil export sft` went from 18 examples to 265.
 
 ## Hooking a session end
 
-A framework can call one command when a session ends, without embedding quipu and without deciding
+A framework can call one command when a session ends, without embedding sigil and without deciding
 anything about memory itself:
 
 ```bash
-sigil --vault ~/vault hook --transcript session.md --agent glitch --project quipu
+sigil --vault ~/vault hook --transcript session.md --agent glitch --project sigil
 ```
 
 It reads the transcript (a path, or `-` for stdin), runs the reflection pass, writes what survives the
@@ -466,7 +466,7 @@ written twice by a later one.
   100 s are not a 300 s pass when a framework is waiting on it. Scale it with the chunk count —
   `--max-chars` decides how many there are — or a long session fails at the deadline however fast the
   model is. Measured: a 348 KB session is 24 chunks at `--max-chars 12000` and needs ~900 s.
-- `QUIPU_HOOK_DRY_RUN=1` (or `--dry-run`) prints the exact prompt and writes nothing — the way to check
+- `SIGIL_HOOK_DRY_RUN=1` (or `--dry-run`) prints the exact prompt and writes nothing — the way to check
   the hook without spending tokens.
 - A pass that completes but proposes nothing exits 0 and says so on stderr. That is a legitimate
   outcome for a thin transcript, and it must stay visible: a hook that runs for a week and writes
@@ -476,13 +476,13 @@ Measured: a 3 KB transcript against the local `qwen3.6-35b-a3b` took 104 s and p
 with the warning); a 14 KB transcript hit the endpoint's own read timeout and the hook exited 1 with
 `reflection failed: TimeoutError: timed out`.
 
-## The provider path: quipu inside Hermes
+## The provider path: sigil inside Hermes
 
 Everything above is the explicit path: the agent is told to search, told to write, and told to run
 the hook at the end of a session. That works, and it depends on the agent remembering to do it —
 the vault is only as good as the discipline behind it.
 
-Hermes can also drive quipu directly, as a memory provider: `memory.provider: quipu` in the
+Hermes can also drive sigil directly, as a memory provider: `memory.provider: sigil` in the
 profile's `config.yaml`. The provider then searches the vault before each answer on its own, and
 appends the turns to a session journal under `.sigil/`. Two tools appear in the agent's tool list,
 `sigil_search` and `sigil_write`, for the times the agent wants to reach further than the recall
@@ -620,7 +620,7 @@ you are sure.
 `--edge wants src:predicate:dst, got 'onlyone:part'` and exits 2.
 
 **A `--edge` that fails after the entry was written.** `sigil write` writes the entry to `notes/`
-before it asserts the edges, so a bad predicate leaves the entry on disk but unindexed — `quipu
+before it asserts the edges, so a bad predicate leaves the entry on disk but unindexed — `sigil
 search` will not find it until `sigil reindex` runs. The index is disposable; the markdown is the
 truth, and a reindex rebuilds it in milliseconds.
 

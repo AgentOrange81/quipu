@@ -1,6 +1,6 @@
 """Black-box contract tests for sigil.hermes_provider (quipu issue #10).
 
-These tests certify QuipuMemoryProvider against the Hermes MemoryProvider ABC
+These tests certify SigilMemoryProvider against the Hermes MemoryProvider ABC
 (issue #10). The tests are the certification, not a description of the code:
 they are written before the implementation exists and are expected to fail
 with ImportError/ModuleNotFoundError until cipher's branch lands.
@@ -34,7 +34,7 @@ from typing import NamedTuple
 import sigil.config
 import sigil.index
 from sigil.cli import main
-from sigil.hermes_provider import QuipuMemoryProvider, register
+from sigil.hermes_provider import SigilMemoryProvider, register
 from sigil.store import iter_entries
 
 # ---------------------------------------------------------------------------
@@ -151,7 +151,7 @@ def _make_provider(tmp_path: Path, monkeypatch, entries: list[_Entry], vault_nam
     vault = build_vault(tmp_path / vault_name, entries)
     monkeypatch.delenv("QUIPU_VAULT", raising=False)
     monkeypatch.setenv("QUIPU_VAULT", str(vault))
-    provider = QuipuMemoryProvider()
+    provider = SigilMemoryProvider()
     provider.initialize(
         SESSION_ID,
         hermes_home=str(tmp_path / ".hermes-not-used"),
@@ -166,9 +166,9 @@ def _make_provider(tmp_path: Path, monkeypatch, entries: list[_Entry], vault_nam
 
 
 def test_interface_is_complete():
-    """An instance exposes every contracted attribute; name is exactly 'quipu'."""
-    provider = QuipuMemoryProvider()
-    assert provider.name == "quipu"
+    """An instance exposes every contracted attribute; the name follows the registration."""
+    provider = SigilMemoryProvider()
+    assert provider.name == "sigil"
     for attr in (
         "is_available",
         "initialize",
@@ -194,7 +194,7 @@ def test_vault_resolution_uses_quipu_vault_env(tmp_path, monkeypatch):
     vault = build_vault(tmp_path / "env-vault", [E_ALPHA])
     monkeypatch.delenv("QUIPU_VAULT", raising=False)
     monkeypatch.setenv("QUIPU_VAULT", str(vault))
-    provider = QuipuMemoryProvider()
+    provider = SigilMemoryProvider()
     provider.initialize(SESSION_ID, hermes_home=str(tmp_path / "no-homes-here"), platform="cli")
     assert provider.is_available()
     assert str(vault) in provider.system_prompt_block()
@@ -207,7 +207,7 @@ def test_vault_resolution_falls_back_to_hermes_home_vault(tmp_path, monkeypatch)
     hermes_home = tmp_path / ".hermes"
     hermes_home.mkdir()
     home_vault = build_vault(hermes_home / "quipu-vault", [E_BETA])
-    provider = QuipuMemoryProvider()
+    provider = SigilMemoryProvider()
     provider.initialize(SESSION_ID, hermes_home=str(hermes_home), platform="cli")
     assert provider.is_available()
     assert str(home_vault) in provider.system_prompt_block()
@@ -223,7 +223,7 @@ def test_vault_resolution_without_any_vault_reports_reason(tmp_path, monkeypatch
     # exists — so the test must move HOME into the tmp tree or it asserts against the live vault.
     monkeypatch.setenv("HOME", str(tmp_path))
     monkeypatch.setenv("USERPROFILE", str(tmp_path))
-    provider = QuipuMemoryProvider()
+    provider = SigilMemoryProvider()
     provider.initialize(SESSION_ID, hermes_home=str(hermes_home), platform="cli")
     assert not provider.is_available()
     reason = provider.unavailable_reason()
@@ -411,7 +411,7 @@ def test_get_tool_schemas_shape_and_exact_names(tmp_path, monkeypatch):
         assert isinstance(schema["name"], str) and schema["name"].strip()
         assert isinstance(schema["description"], str) and schema["description"].strip()
         assert isinstance(schema["parameters"], dict)
-    assert sorted(s["name"] for s in schemas) == ["quipu_search", "quipu_write"]
+    assert sorted(s["name"] for s in schemas) == ["sigil_search", "sigil_write"]
 
 
 # ---------------------------------------------------------------------------
@@ -423,18 +423,18 @@ def test_handle_tool_call_returns_json_string_for_known_tools(tmp_path, monkeypa
     """Both tools answer with a string that parses to a JSON object."""
     provider, _vault = _make_provider(tmp_path, monkeypatch, ALL_THREE)
     for tool_name, args in (
-        ("quipu_search", {"query": MATCH_ALPHA}),
-        ("quipu_write", {"summary": "qa probe summary for the write tool"}),
+        ("sigil_search", {"query": MATCH_ALPHA}),
+        ("sigil_write", {"summary": "qa probe summary for the write tool"}),
     ):
         raw = provider.handle_tool_call(tool_name, args)
         assert isinstance(raw, str), tool_name
         assert isinstance(json.loads(raw), dict), tool_name
 
 
-def test_handle_tool_call_quipu_search_finds_the_entry(tmp_path, monkeypatch):
+def test_handle_tool_call_sigil_search_finds_the_entry(tmp_path, monkeypatch):
     """The search tool actually surfaces the vault's matching entry."""
     provider, _vault = _make_provider(tmp_path, monkeypatch, ALL_THREE)
-    raw = provider.handle_tool_call("quipu_search", {"query": MATCH_ALPHA})
+    raw = provider.handle_tool_call("sigil_search", {"query": MATCH_ALPHA})
     assert isinstance(raw, str)
     assert "moonshot" in raw
 
@@ -442,7 +442,7 @@ def test_handle_tool_call_quipu_search_finds_the_entry(tmp_path, monkeypatch):
 def test_handle_tool_call_unknown_tool_returns_error_json(tmp_path, monkeypatch):
     """An unknown tool name yields a JSON object with an 'error' key, no raise."""
     provider, _vault = _make_provider(tmp_path, monkeypatch, [E_ALPHA])
-    raw = provider.handle_tool_call("quipu_explode", {})
+    raw = provider.handle_tool_call("sigil_explode", {})
     assert isinstance(raw, str)
     parsed = json.loads(raw)
     assert isinstance(parsed, dict)
@@ -466,4 +466,4 @@ def test_register_registers_exactly_one_provider():
     assert len(calls) == 1
     args, kwargs = calls[0]
     provider = args[0] if args else kwargs.get("provider")
-    assert getattr(provider, "name", None) == "quipu"
+    assert getattr(provider, "name", None) == "sigil"

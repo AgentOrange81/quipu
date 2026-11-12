@@ -211,34 +211,24 @@ def test_the_provider_reports_the_name_it_was_registered_under():
     assert sorted(s["name"] for s in provider.get_tool_schemas()) == ["sigil_search", "sigil_write"]
 
 
-def test_the_legacy_entry_point_keeps_the_legacy_identity():
-    """The `quipu` entry point survives one release, so a provider loaded by it keeps its name."""
-    ctx = _Ctx("quipu")
-
-    provider_mod.register(ctx)
-
-    provider = ctx.providers[0]
-    assert provider.name == "quipu"
-    assert sorted(s["name"] for s in provider.get_tool_schemas()) == ["quipu_search", "quipu_write"]
-
-
-def test_a_context_without_a_name_keeps_the_legacy_identity():
+def test_a_context_without_a_name_still_reports_sigil():
+    """There is one name to select since 0.10.0, so a nameless context cannot fall back to the old one."""
     ctx = _Ctx("")
 
     provider_mod.register(ctx)
 
-    assert ctx.providers[0].name == "quipu"
+    assert ctx.providers[0].name == "sigil"
 
 
-def test_the_legacy_tool_names_still_dispatch_under_the_new_identity():
-    """Existing agents call quipu_search; the rename must not break the calls in flight."""
-    provider = provider_mod.QuipuMemoryProvider(name="sigil")
+def test_an_old_tool_name_is_refused_not_silently_answered():
+    """A session holding a pre-0.10.0 `quipu_*` schema is stale; the error says which tools exist."""
+    provider = provider_mod.SigilMemoryProvider(name="sigil")
 
-    legacy = provider.handle_tool_call("quipu_search", {"query": "wheel filename"})
-    unknown = provider.handle_tool_call("quipu_explode", {})
+    stale = provider.handle_tool_call("quipu_search", {"query": "wheel filename"})
+    unknown = provider.handle_tool_call("sigil_explode", {})
 
-    assert "not 'quipu_search'" not in legacy, legacy
-    assert "not 'quipu_explode'" in unknown, unknown
+    assert "not 'quipu_search'" in stale, stale
+    assert "not 'sigil_explode'" in unknown, unknown
 
 
 def test_the_provider_threads_and_logs_are_named_for_sigil():
