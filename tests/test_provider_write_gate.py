@@ -1,6 +1,6 @@
 """The promotion gate behind the write tool (#79).
 
-`quipu_write` used to go through `sigil.mcp._write` with no `state` and no `importance`, so an entry an
+`sigil_write` used to go through `sigil.mcp._write` with no `state` and no `importance`, so an entry an
 agent wrote was always `raw` — present and searchable, but never promotable and never exported as
 training data. The fix has to expose both fields *without* handing the model a way to mint `promoted`
 entries, so the same gate the importer and `quipu promote` use decides: evidence **and** importance at
@@ -14,22 +14,22 @@ from pathlib import Path
 
 import sigil.config
 import sigil.index
-from sigil.hermes_provider import QuipuMemoryProvider
+from sigil.hermes_provider import SigilMemoryProvider
 
 SUMMARY = "The release wheel refused to install until the filename kept all five parts"
 
 
-def _provider(tmp_path: Path, monkeypatch) -> tuple[QuipuMemoryProvider, Path]:
+def _provider(tmp_path: Path, monkeypatch) -> tuple[SigilMemoryProvider, Path]:
     vault = tmp_path / "vault"
     sigil.config.load(vault, create=True)
     monkeypatch.setenv("QUIPU_VAULT", str(vault))
-    provider = QuipuMemoryProvider()
+    provider = SigilMemoryProvider()
     provider.initialize("gate-test", hermes_home=str(tmp_path / ".hermes"), platform="cli")
     return provider, vault
 
 
-def _write(provider: QuipuMemoryProvider, **args) -> dict:
-    out = provider.handle_tool_call("quipu_write", args)
+def _write(provider: SigilMemoryProvider, **args) -> dict:
+    out = provider.handle_tool_call("sigil_write", args)
     assert isinstance(out, str), "the contract returns a JSON string"
     return json.loads(out)
 
@@ -92,5 +92,5 @@ def test_the_written_entry_is_searchable_afterwards(tmp_path, monkeypatch):
     provider, _ = _provider(tmp_path, monkeypatch)
     out = _write(provider, summary=SUMMARY, evidence="renamed the asset to five parts",
                  importance=0.9)
-    hits = json.loads(provider.handle_tool_call("quipu_search", {"query": "wheel filename"}))
+    hits = json.loads(provider.handle_tool_call("sigil_search", {"query": "wheel filename"}))
     assert any(h["id"] == out["id"] for h in hits["results"]), hits

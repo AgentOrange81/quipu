@@ -47,7 +47,7 @@ evidence: "hand-written fixture"
 
 
 def run_cli(*args):
-    return subprocess.run([sys.executable, "-m", "quipu", *args], capture_output=True, text=True,
+    return subprocess.run([sys.executable, "-m", "sigil", *args], capture_output=True, text=True,
                           timeout=60, stdin=subprocess.DEVNULL)
 
 

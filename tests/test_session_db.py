@@ -135,7 +135,7 @@ def test_the_cli_accepts_the_flag(tmp_path):
                                  "edges": [], "confidence": 0.8}]), encoding="utf-8")
     vault = tmp_path / "vault"
     (vault / "notes").mkdir(parents=True)  # a vault has to exist: a wrong path is refused (#141)
-    proc = subprocess.run([sys.executable, "-m", "quipu", "--vault", str(vault), "hook",
+    proc = subprocess.run([sys.executable, "-m", "sigil", "--vault", str(vault), "hook",
                            "--session-db", str(db), "--session", SID, "--fake", str(fake),
                            "--max-chars", "0", "--agent", "glitch"],
                           capture_output=True, text=True, timeout=60, stdin=subprocess.DEVNULL)
@@ -148,7 +148,7 @@ def test_include_tools_reaches_the_prompt(tmp_path):
     db = _db(tmp_path, MIXED)
     vault = tmp_path / "vault"
     (vault / "notes").mkdir(parents=True)  # a vault has to exist: a wrong path is refused (#141)
-    proc = subprocess.run([sys.executable, "-m", "quipu", "--vault", str(vault), "hook",
+    proc = subprocess.run([sys.executable, "-m", "sigil", "--vault", str(vault), "hook",
                            "--session-db", str(db), "--session", SID, "--include-tools",
                            "--dry-run", "--max-chars", "0"],
                           capture_output=True, text=True, timeout=60, stdin=subprocess.DEVNULL)

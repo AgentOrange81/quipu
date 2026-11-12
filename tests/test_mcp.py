@@ -47,7 +47,7 @@ def server_tree_version():
 class McpServer:
     def __init__(self, vault):
         self.proc = subprocess.Popen(
-            [SERVER_PY, "-m", "quipu", "--vault", str(vault), "mcp"],
+            [SERVER_PY, "-m", "sigil", "--vault", str(vault), "mcp"],
             stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
             text=True, bufsize=1, cwd=str(SERVER_TREE),
             env=dict(os.environ, PYTHONUNBUFFERED="1"))

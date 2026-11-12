@@ -38,9 +38,10 @@ _DEFAULT_LIMIT = 5
 _DEFAULT_MAX_TOKENS = 400
 _MIN_QUERY_CHARS = 4
 
-#: The pre-rename provider name. The `quipu` entry point still resolves for one release, so a
-#: provider loaded under it keeps calling itself quipu; the product name everywhere else is sigil.
-LEGACY_NAME = "quipu"
+#: The provider name. It follows the registration: Hermes hands the entry-point name to `register()`,
+#: so the tools and the system block carry whatever name the profile selected. Since 0.10.0 there is
+#: exactly one name to select — the old `quipu` entry point is gone.
+PROVIDER_NAME = "sigil"
 _TURN_CAPTURE_CHARS = 4000
 _JOIN_TIMEOUT = 5.0
 
@@ -118,12 +119,12 @@ def _str_prop(description: str) -> dict[str, Any]:
 def _schema_for(schema: dict[str, Any], provider_name: str) -> dict[str, Any]:
     """The same tool under the provider's own name: the tools follow the registration."""
     out = dict(schema)
-    out["name"] = schema["name"].replace(f"{LEGACY_NAME}_", f"{provider_name}_", 1)
+    out["name"] = schema["name"].replace(f"{PROVIDER_NAME}_", f"{provider_name}_", 1)
     return out
 
 
 SEARCH_SCHEMA = _schema(
-    "quipu_search",
+    "sigil_search",
     "Search the sigil memory vault for prior outcomes, decisions and measurements. "
     "Use before answering anything project-history shaped.",
     {"query": _str_prop("What to look for (keywords, not sentences)."),
@@ -132,7 +133,7 @@ SEARCH_SCHEMA = _schema(
 )
 
 WRITE_SCHEMA = _schema(
-    "quipu_write",
+    "sigil_write",
     "Record one real outcome in the sigil vault: a decision with its reason, a measurement, or a "
     "root cause. summary is the retrieval handle; evidence is how a skeptic re-checks it.",
     {"summary": _str_prop("One-sentence statement of the fact."),
@@ -160,21 +161,23 @@ WRITE_SCHEMA = _schema(
 )
 
 
-class QuipuMemoryProvider(MemoryProvider):
+class SigilMemoryProvider(MemoryProvider):
     """MemoryProvider backed by a local sigil vault (index recall + JSONL turn capture).
 
     The instance takes the name it was REGISTERED under, so the identity the provider reports is
-    the one Hermes selected it by: `sigil` for the product, `quipu` for the legacy entry point that
-    survives one release.
+    the one Hermes selected it by (`memory.provider: <name>`), and the tools follow it.
     """
 
-    def __init__(self, config: dict[str, Any] | None = None, name: str = LEGACY_NAME):
+    def __init__(self, config: dict[str, Any] | None = None, name: str = PROVIDER_NAME):
         cfg = dict(config) if config is not None else _load_plugin_config()
         self._config = cfg
-        self._name = name or LEGACY_NAME
-        self._limit = int(cfg.get("limit") or os.environ.get("QUIPU_PREFETCH_LIMIT") or _DEFAULT_LIMIT)
-        self._max_tokens = int(cfg.get("max_tokens") or os.environ.get("QUIPU_PREFETCH_MAX_TOKENS")
-                               or _DEFAULT_MAX_TOKENS)
+        self._name = name or PROVIDER_NAME
+        # SIGIL_* is the name; QUIPU_* still resolves because a profile `.env` written before the
+        # rename carries it (data compatibility, not branding — same rule as `.quipu/`).
+        self._limit = int(cfg.get("limit") or os.environ.get("SIGIL_PREFETCH_LIMIT")
+                          or os.environ.get("QUIPU_PREFETCH_LIMIT") or _DEFAULT_LIMIT)
+        self._max_tokens = int(cfg.get("max_tokens") or os.environ.get("SIGIL_PREFETCH_MAX_TOKENS")
+                               or os.environ.get("QUIPU_PREFETCH_MAX_TOKENS") or _DEFAULT_MAX_TOKENS)
         self._hermes_home = ""
         self._vault = ""
         self._session_id = ""
@@ -363,9 +366,11 @@ class QuipuMemoryProvider(MemoryProvider):
             return json.dumps({"error": f"{self._name} {tool_name} failed: {exc}"})
 
     def _handle_tool(self, tool_name: str, args: dict[str, Any]) -> str:
-        if tool_name in (self._search_tool, f"{LEGACY_NAME}_search"):
+        # exactly the two tools this provider advertises: a stale `quipu_*` schema is a stale session,
+        # and answering it would hide that from the agent holding it
+        if tool_name == self._search_tool:
             return self._tool_search(args)
-        if tool_name in (self._write_tool, f"{LEGACY_NAME}_write"):
+        if tool_name == self._write_tool:
             return self._tool_write(args)
         return json.dumps({"error": f"{self._name} provider handles {self._search_tool}/"
                                       f"{self._write_tool}, not {tool_name!r}"})
@@ -451,8 +456,8 @@ def register(ctx) -> None:
     """Entry point for the ``hermes_agent.memory_providers`` group.
 
     The provider takes the name it was REGISTERED under: Hermes resolves a provider by entry-point
-    name and hands that name to the plugin context, so `memory.provider: sigil` yields a provider
-    that calls itself sigil, while the legacy `quipu` entry point keeps its name for one release.
+    name and hands that name to the plugin context, so the provider — and the tools it exposes —
+    carry the name the profile selected.
     """
-    name = getattr(ctx, "name", "") or LEGACY_NAME
-    ctx.register_memory_provider(QuipuMemoryProvider(name=name))
+    name = getattr(ctx, "name", "") or PROVIDER_NAME
+    ctx.register_memory_provider(SigilMemoryProvider(name=name))

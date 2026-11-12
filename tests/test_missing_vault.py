@@ -141,9 +141,9 @@ def test_mcp_binary_exits_nonzero_before_reading_stdin(tmp_path):
 # -- the provider ------------------------------------------------------------------------------------
 
 def test_provider_write_returns_the_error_instead_of_raising(cfg, tmp_path):
-    from sigil.hermes_provider import QuipuMemoryProvider  # noqa: PLC0415 - optional dep graph
+    from sigil.hermes_provider import SigilMemoryProvider  # noqa: PLC0415 - optional dep graph
 
-    provider = QuipuMemoryProvider.__new__(QuipuMemoryProvider)  # bypass __init__: no live vault needed
+    provider = SigilMemoryProvider.__new__(SigilMemoryProvider)  # bypass __init__: no live vault needed
     provider._vault = str(tmp_path / "gone")
     provider._session_id = "s"
     out = json.loads(provider._tool_write({"summary": "s", "evidence": "e"}))

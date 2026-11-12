@@ -9,20 +9,21 @@ mechanism:
 |---|---|---|
 | **episodic** | "we tried fp16 VAE on gfx1031 and the ring hung" | cheap capture, kept verbatim |
 | **semantic** | "gfx1031 needs `--cpu-vae` for heavy decodes" | promotion: distilled, always-loadable |
-| **relational** | "quipu depends_on sqlite; sqlite used_by fts5" | graph edges, with validity windows |
+| **relational** | "sigil depends_on sqlite; sqlite used_by fts5" | graph edges, with validity windows |
 
 Most systems store all three the same way — one vector table, one chunk size — and then wonder why
-retrieval feels like guessing. quipu separates the storage per kind while keeping one query surface.
+retrieval feels like guessing. sigil separates the storage per kind while keeping one query surface.
 
 ## 2. Three layers
 
 ```
 notes/<id>-<slug>.md     the entries: episodic + semantic, frontmatter + body      <- source of truth
-.quipu/index.db          FTS5 index over entries; entities; temporal edges         <- derived, disposable
+.sigil/index.db          FTS5 index over entries; entities; temporal edges         <- derived, disposable
 entities/<slug>.md       graph hubs, written from the db                          <- browsable mirror
 ```
 
-The db can be deleted at any time; `quipu reindex` recreates the FTS index and `quipu edge` replays
+A vault written before the rename keeps `.quipu/` instead and it is read there, never moved. The db can
+be deleted at any time; `sigil reindex` recreates the FTS index and `sigil edge` replays
 rebuild the graph from the entries' own frontmatter if you keep edge assertions in them. Nothing in
 the design requires the db to be the truth.
 
@@ -47,7 +48,7 @@ produce evidence has not produced a memory.
 
 ## 4. Why the ask matters
 
-A distilled fact is only half a training example. Without the question, `quipu` would be exporting
+A distilled fact is only half a training example. Without the question, `sigil` would be exporting
 answers to questions nobody asked — which teaches a model to volunteer facts. So every promoted entry
 carries `ask`: the request it answers, self-contained. Export filters asks shorter than 20 characters
 or under three words, because "did that fix it" is a conversation turn, not a prompt.
@@ -108,12 +109,12 @@ not the 1/60 convention, so its published numbers are not comparable to systems 
 
 ## 7. Failure modes this design is a reaction to
 
-Each of these cost real time in the corpus quipu was extracted from:
+Each of these cost real time in the corpus sigil was extracted from:
 
 1. **84% noise.** Auto-writing a `session` entry at every session end put 4,572 session rows in front
    of 855 real ones. Fixed by the gate — and by making raw captures free but promotion expensive.
 2. **A silent hook failure.** A `KeyError` in the scoring function killed every session-end write for
-   months; the only symptom was a one-line warning. Hence `quipu audit`, and hence tests that assert
+   months; the only symptom was a one-line warning. Hence `sigil audit`, and hence tests that assert
    *an entry was written*, not that a call returned.
 3. **Evidence-free entries.** A plausible summary with no proof is worse than nothing: it gets
    retrieved and trusted. Hence `evidence` is required for promotion and audited.

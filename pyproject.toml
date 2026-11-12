@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "sigil-memory"
-version = "0.9.0"
+version = "0.10.0"
 description = "Local-first agent memory: verbatim capture, a temporal knowledge graph, and lifecycle-labeled training data."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -38,16 +38,12 @@ dev = ["pytest>=8", "ruff>=0.5", "build>=1.2"]
 [project.scripts]
 sigil = "sigil.cli:main"
 sigil-capture = "sigil.capture:main"
-# one release of grace: anything still calling the old names keeps working
-quipu = "sigil.cli:main"
-quipu-capture = "sigil.capture:main"
 
 [project.entry-points."hermes_agent.memory_providers"]
 sigil = "sigil:register"
-quipu = "sigil:register"
 
 [tool.hatch.build.targets.wheel]
-packages = ["sigil", "quipu"]
+packages = ["sigil"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

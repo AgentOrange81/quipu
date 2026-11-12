@@ -33,7 +33,7 @@ T1 = "2026-01-01T00:00:00Z"
 def run_cli(*args, stdin_text=None, cwd=None):
     """Run `python -m quipu <args>` as a user would; stdin /dev/null unless text is piped."""
     return subprocess.run(
-        [sys.executable, "-m", "quipu", *args],
+        [sys.executable, "-m", "sigil", *args],
         capture_output=True, text=True, timeout=60, cwd=cwd,
         input=stdin_text, stdin=None if stdin_text is not None else subprocess.DEVNULL,
     )

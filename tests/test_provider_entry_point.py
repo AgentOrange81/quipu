@@ -1,7 +1,7 @@
 """The packaging contract Hermes depends on (#10).
 
 Hermes resolves a memory provider's *directory* from its entry point without importing it, and only
-a package ``__init__`` yields one — so the entry point must name ``quipu``, not
+a package ``__init__`` yields one — so the entry point must name ``sigil``, not
 ``sigil.hermes_provider``. Pointing it at the bare module made a correctly installed provider report
 "configured but not installed and not in the plugin catalog", which reads as a bad install and is
 actually a bad entry point.
@@ -36,10 +36,9 @@ def _entry_point() -> str:
         )
         assert block, "the provider entry-point table is missing from pyproject.toml"
         group = dict(re.findall(r'^([\w.\-]+)\s*=\s*"([^"]+)"', block.group(1), re.M))
-    # two names for one release: `sigil` is the product, `quipu` keeps an existing
-    # `memory.provider: quipu` config resolving instead of failing at gateway start (#135)
+    # one name since 0.10.0: the alias retired and took its entry point with it (#135)
     values = group if isinstance(group, dict) else {p.name: p for p in group}
-    assert sorted(values) == ["quipu", "sigil"], \
+    assert sorted(values) == ["sigil"], \
         "the provider is selected by name: memory.provider: sigil"
     return values["sigil"]
 
@@ -75,4 +74,4 @@ def test_register_registers_one_provider():
     ctx = Ctx()
     sigil.register(ctx)
     assert len(ctx.providers) == 1
-    assert ctx.providers[0].name == "quipu"
+    assert ctx.providers[0].name == "sigil"

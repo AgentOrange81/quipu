@@ -1,5 +1,9 @@
 # Alpha
 
+**This is a snapshot at 0.1.0, not today's state.** Every number below was measured then; the vault has
+grown several times since and several gaps listed here have shipped (`sigil embed`, `sigil mcp`). Treat
+it as a record of what alpha looked like, and use `sigil stats` / `sigil audit` for the current figures.
+
 What "alpha" means here, measured on the live vault. Every number below was produced by running the
 command shown, on this box, against `~/sigil-vault`. Where a figure comes from an issue instead, the
 issue says so.
@@ -14,7 +18,7 @@ are read before answering.
 | vault | `~/sigil-vault` — 830 entries, 830 markdown files in `notes/`, 0 in `entities/` |
 | where it came from | 829 entries imported from `~/fabric` in 355 ms (recorded in the migration entry `51375dda`); the 830th was written by hand during that migration (`source: cli`) |
 | size | 5.3 MiB of files (7.3 MB allocated on disk), of which the SQLite index is 3.3 MB |
-| CLI | `quipu` on `PATH` at 0.1.0 (`/home/dirk/.local/bin/quipu`), so every profile and every shell gets it |
+| CLI | `sigil` on `PATH` at 0.1.0 (`/home/dirk/.local/bin/sigil`), so every profile and every shell gets it |
 
 Alpha is **not** production-hardened. `sigil --vault ~/sigil-vault audit` currently reports **509
 problems**, all of one kind (`promoted without evidence`), and exits 1. §4 says what that means for
@@ -41,7 +45,7 @@ evidence stays raw, and the importer's state-lie (§4) is what happens when it i
 - **Recall over 830 entries.** Topic queries hit reliably; §2 has the four measured examples.
 - **The lifecycle and the gate.** `capture` → `reflect` → `promote` → `correct` → `export`. The
   promotion gate is `importance >= promote_threshold` (0.5 in `.sigil/config.toml`) **and** non-empty
-  evidence; below either, the entry stays raw (`quipu/promote.py:148`).
+  evidence; below either, the entry stays raw (`sigil/promote.py:148`).
 - **Supersede produces a preference pair.** `write --supersedes <id>` on an entry that has an `ask`
   and evidence yields a DPO pair (chosen = the correction, rejected = the superseded claim). Verified
   on a scratch vault: 1 pair, `preference_pairs: 1`.
@@ -91,15 +95,16 @@ markdown, and `sigil audit` reports any superseded entry whose edge is still liv
 written by this version is in.
 
 **#23 — a vault written before the identity fix cannot be opened at all.** Reproduced on a synthetic
-old schema: `sqlite3.OperationalError: no such column: key` from `quipu/index.py:43` — the
+old schema: `sqlite3.OperationalError: no such column: key` from `sigil/index.py:43` — the
 `CREATE INDEX` runs before the `ALTER TABLE` migration, so the migration is unreachable exactly when
 it is needed. Every command dies on such a vault.
 
-**#5 — no embeddings.** No `vec` table in the index and no `sigil embed` subcommand. Retrieval is
-BM25 lexical only, so paraphrase and cross-vocabulary matches are missed.
+**#5 — no embeddings.** At 0.1.0 there was no `vec` table and no `sigil embed` subcommand, so retrieval
+was BM25 lexical only. `sigil embed` and `search --hybrid` have shipped since; a vault with no `[embed]
+url` still runs lexical-only, which is the default.
 
-**#9 — no MCP server.** No `sigil mcp` subcommand. The integration surface is the CLI plus the
-`quipu` skill.
+**#9 — no MCP server.** At 0.1.0 there was no `sigil mcp` subcommand; it has since shipped, so the
+integration surface is now CLI + MCP + the provider. The `quipu` agent skill keeps its old name for now.
 
 Two limits on the above: `audit` only sees the problems it checks (evidence), and cannot detect the
 #30 transcript junk; and the #31 precision figures come from the benchmark harness on synthetic

@@ -715,7 +715,7 @@ def cmd_hook(args) -> int:
     """The session-end adapter: one reflection pass, no partial writes, non-zero on every failure (#3).
 
     A hook that exits 0 after doing nothing is the failure this project exists because of, so the
-    only success path is a completed pass; `QUIPU_HOOK_DRY_RUN=1` prints the prompt and writes nothing.
+    only success path is a completed pass; `SIGIL_HOOK_DRY_RUN=1` prints the prompt and writes nothing.
     """
     cfg = _cfg(args)
     dry = args.dry_run or hook_mod.dry_run_requested()
@@ -860,7 +860,7 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--include-tools", action="store_true",
                    help="with --session-db: also read tool results, capped at 2000 chars each")
     s.add_argument("--dry-run", action="store_true",
-                   help="print the prompt and write nothing (also QUIPU_HOOK_DRY_RUN=1)")
+                   help="print the prompt and write nothing (also SIGIL_HOOK_DRY_RUN=1)")
 
     s = add("search", "full-text search", cmd_search)
     s.add_argument("query")
