@@ -1,8 +1,8 @@
-"""The release invariants: one version, in two files, with a changelog section for it.
+"""The release invariants: one version, in three files, with a changelog section for it.
 
-A wheel whose `quipu --version` disagrees with its own filename, or a tag with no `## <version>`
-heading to publish as release notes, is the kind of mistake that is only visible to the person
-installing. So it is a test.
+A wheel whose `sigil --version` disagrees with its own filename, a `hermes plugins list` row that
+reports the previous release, or a tag with no `## <version>` heading to publish as release notes,
+is the kind of mistake that is only visible to the person installing. So it is a test.
 """
 import re
 from pathlib import Path
@@ -14,6 +14,7 @@ import sigil
 ROOT = Path(__file__).resolve().parent.parent
 PYPROJECT = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
 CHANGELOG = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
+PLUGIN_MANIFEST = ROOT / "sigil" / "plugin.yaml"
 
 
 def _pyproject_version() -> str:
@@ -22,10 +23,34 @@ def _pyproject_version() -> str:
     return match.group(1)
 
 
+def _manifest_field(field: str) -> str:
+    match = re.search(rf"^{field}:\s*(\S+)\s*$", PLUGIN_MANIFEST.read_text(encoding="utf-8"), re.M)
+    assert match, f"sigil/plugin.yaml has no top-level {field!r} line"
+    return match.group(1).strip("\"'")
+
+
 def test_the_package_and_the_metadata_agree_on_the_version():
     assert sigil.__version__ == _pyproject_version(), (
-        "quipu/__init__.py and pyproject.toml disagree; `quipu --version` and the MCP "
+        "sigil/__init__.py and pyproject.toml disagree; `sigil --version` and the MCP "
         "serverInfo.version would both be wrong"
+    )
+
+
+def test_the_plugin_manifest_agrees_with_the_package_version():
+    """`hermes plugins list` shows plugin.yaml's version, and nothing in the build reads it.
+
+    That is exactly why it rots: a release that moves pyproject.toml and __init__.py leaves every
+    profile advertising the previous number until someone happens to look at the table.
+    """
+    assert _manifest_field("version") == _pyproject_version(), (
+        "sigil/plugin.yaml and pyproject.toml disagree; `hermes plugins list` would report a "
+        "version the artifact does not carry"
+    )
+
+
+def test_the_plugin_manifest_names_the_package():
+    assert _manifest_field("name") == "sigil", (
+        "the manifest name is how Hermes discovers the plugin; it must match the package directory"
     )
 
 

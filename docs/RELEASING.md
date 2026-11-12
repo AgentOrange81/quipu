@@ -3,16 +3,19 @@
 A release is three things that must agree: the version string, the CHANGELOG section, and the tag.
 CI builds the artifacts from the tag; everything below is what a person does before and after that.
 
-## The version lives in two places
+## The version lives in three places
 
 | file | what it holds | who reads it |
 |---|---|---|
 | `pyproject.toml` | `version = "0.10.0"` | the wheel and sdist filenames, and pip |
 | `sigil/__init__.py` | `__version__ = "0.10.0"` | `sigil --version`, the MCP `serverInfo.version` |
+| `sigil/plugin.yaml` | `version: 0.10.0` | `hermes plugins list`, per profile — the number agents believe |
 
-Both must move together, in the same commit. A mismatch is not a build error: the wheel installs
+All three must move together, in the same commit. A mismatch is not a build error: the wheel installs
 and `sigil --version` prints a string the artifact does not carry, so the published version and
-the reported version disagree with no signal that anything is wrong.
+the reported version disagree with no signal that anything is wrong. The manifest is the one that
+rots quietly — nothing in the build reads it, so it keeps advertising the previous release in every
+profile until someone looks. `tests/test_release_metadata.py` fails on all three.
 
 ## CHANGELOG first
 
@@ -64,13 +67,14 @@ environment `pypi`); until then the GitHub Release is the install path.
 
 ## After the tag
 
-Bump `main` to the next development version in `pyproject.toml` and `sigil/__init__.py` (the
-`X.Y.ZaN` form this repo uses, e.g. `0.10.1a1`), so a later install from `main` cannot claim to
-be the release — only the tagged artifact carries the number `0.10.0`.
+Bump `main` to the next development version in `pyproject.toml`, `sigil/__init__.py` and
+`sigil/plugin.yaml` (the `X.Y.ZaN` form this repo uses, e.g. `0.10.1a1`), so a later install from
+`main` cannot claim to be the release — only the tagged artifact carries the number `0.10.0`.
 
 ```console
 sed -i 's/^version = "0.10.0"/version = "0.10.1a1"/' pyproject.toml
 sed -i 's/^__version__ = "0.10.0"/__version__ = "0.10.1a1"/' sigil/__init__.py
+sed -i 's/^version: 0.10.0$/version: 0.10.1a1/' sigil/plugin.yaml
 git commit -am "chore: 0.10.1a1 after the 0.10.0 tag"
 git push origin main
 ```
